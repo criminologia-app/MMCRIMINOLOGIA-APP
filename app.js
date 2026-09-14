@@ -1232,6 +1232,67 @@ function fazerLogout() {
   window.location.href = "login.html";
 }
 
+async function validarEAgravarAgente(event) {
+  event.preventDefault();
+
+  const inputEmail = document.getElementById("email-usuario");
+  const btnSubmeter = document.getElementById("btn-submeter");
+  const email = inputEmail.value.trim();
+
+  // 1. Feedback visual de carregamento
+  btnSubmeter.disabled = true;
+  btnSubmeter.innerText = "A verificar e-mail...";
+
+  try {
+    const apiKey = "SUA_CHAVE_API_AQUI";
+    const resposta = await fetch(`https://emailvalidation.abstractapi.com/v1/?api_key=${apiKey}&email=${email}`);
+    const dados = await resposta.json();
+
+    const statusEntrega = dados.deliverability; // DELIVERABLE, UNDELIVERABLE, RISKY
+    const ehDescartavel = dados.is_disposable_email?.value === true;
+    const ehCatchAll = dados.is_catchall_email?.value === true;
+
+    // 2. CASO 1: E-mail inexistente ou descartável (BLOQUEAR)
+    if (statusEntrega === "UNDELIVERABLE" || ehDescartavel) {
+      alert("O e-mail introduzido é inválido ou temporário. Introduza um e-mail verdadeiro.");
+      inputEmail.focus();
+      restaurarBotao(btnSubmeter);
+      return;
+    }
+
+    // 3. CASO 2: E-mail inconclusivo / Catch-All (PERMITIR COM AVISO/ALERTA)
+    let statusEmailConta = "verificado";
+    
+    if (statusEntrega === "RISKY" || ehCatchAll) {
+      console.warn("E-mail marcado como Catch-All ou inconclusivo. Permitindo registo sob observação.");
+      statusEmailConta = "pendente_verificacao";
+    }
+
+    // 4. CASO 3: Sucesso (Gravação do Utilizador)
+    const novoAgente = {
+      email: email,
+      statusEmail: statusEmailConta,
+      dataRegisto: new Date().toISOString()
+    };
+
+    localStorage.setItem("agente_ativo", JSON.stringify(novoAgente));
+    window.location.href = "treino.html";
+
+  } catch (erro) {
+    // Em caso de falha de rede/API, permite o registo para não interromper a experiência
+    console.error("Erro na comunicação com a API de e-mail:", erro);
+    window.location.href = "treino.html";
+  } finally {
+    restaurarBotao(btnSubmeter);
+  }
+}
+
+function restaurarBotao(botao) {
+  if (botao) {
+    botao.disabled = false;
+    botao.innerText = "Registar";
+  }
+}
 /* ==========================================================================
    M-CRIMINOLOGIA - ESTRUTURA DE DADOS E LÓGICA DO SISTEMA (CORRIGIDO)
    ========================================================================== */
