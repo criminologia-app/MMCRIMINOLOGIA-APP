@@ -464,7 +464,7 @@ function validarInformacoesUtilizador() {
   return false;
 }
 
-const SENHA_MESTRE = "2121BERNADO";
+const SENHA_MESTRE = "212100";
 
 // --------------------------------------------------------------------------
 // AUTENTICAÇÃO E NAVEGAÇÃO ADMIN
@@ -1292,6 +1292,174 @@ function restaurarBotao(botao) {
     botao.disabled = false;
     botao.innerText = "Registar";
   }
+}import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  sendEmailVerification,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.x.x/firebase-auth.js";
+
+const auth = getAuth();
+
+// 1. Registo sem terminar a sessão (efetua o envio do e-mail de confirmação apenas 1 vez)
+async function registarAgenteSeguro(email, password) {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // Envia o e-mail de verificação apenas no momento da criação da conta
+    await sendEmailVerification(user);
+
+    alert("Registo efetuado! Enviamos um e-mail de verificação para " + email + ". Por favor, confirma a tua conta antes de aceder ao treino.");
+    
+    // Redireciona para o painel ou login sem fazer signOut
+    window.location.href = "login.html";
+
+  } catch (error) {
+    alert("Erro ao registar: " + error.message);
+  }
+}
+
+// 2. Validação automática ao entrar na página do treino
+function verificarAcessoAoTreino() {
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      // Nenhum utilizador autenticado
+      window.location.href = "login.html";
+      return;
+    }
+
+    // Força a atualização do estado do utilizador junto dos servidores do Firebase
+    await user.reload();
+
+    if (user.emailVerified) {
+      // E-mail confirmado com sucesso. O acesso é liberado sem pedir nova verificação.
+      console.log("Acesso concedido: e-mail verificado.");
+      iniciarSessaoTreino(); 
+    } else {
+      // O e-mail ainda não foi verificado na caixa de entrada
+      alert("O teu e-mail ainda não foi verificado! Por favor, verifica a tua caixa de entrada para continuar.");
+      window.location.href = "login.html";
+    }
+  });
+}
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "SUA_API_KEY",
+  authDomain: "SEU_PROJETO.firebaseapp.com",
+  projectId: "SEU_PROJETO_ID",
+  storageBucket: "SEU_PROJETO.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "SUA_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Função para enviar o registo do agente para o Firebase
+export async function registarAgenteFirebase(nome, email) {
+  try {
+    await addDoc(collection(db, "agentes"), {
+      nome: nome,
+      email: email,
+      dataAcesso: new Date().toLocaleString("pt-PT"),
+      criadoEm: new Date()
+    });
+  } catch (e) {
+    console.error("Erro ao enviar agente para o Firebase:", e);
+  }
+}
+
+// Escutar histórico de agentes no Painel Admin (Tempo Real)
+export function escutarAgentesFirebase(callback) {
+  const q = query(collection(db, "agentes"), orderBy("criadoEm", "desc"));
+  onSnapshot(q, (snapshot) => {
+    const lista = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    callback(lista);
+  });
+}
+
+// Escutar sugestões enviadas no Painel Admin (Tempo Real)
+export function escutarSugestoesFirebase(callback) {
+  const q = query(collection(db, "sugestoes"), orderBy("criadoEm", "desc"));
+  onSnapshot(q, (snapshot) => {
+    const lista = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    callback(lista);
+  });
+}
+
+// Expõe globalmente para integração com o app.js
+window.registarAgenteFirebase = registarAgenteFirebase;
+window.escutarAgentesFirebase = escutarAgentesFirebase;
+window.escutarSugestoesFirebase = escutarSugestoesFirebase;
+
+function processarLogin(event) {
+  event.preventDefault();
+
+  const nomeInput = document.getElementById("nome-usuario").value.trim();
+  const emailInput = document.getElementById("email-usuario").value.trim();
+
+  if (!nomeInput || !emailInput) {
+    alert("Por favor, preencha todos os campos obrigatórios.");
+    return;
+  }
+
+  const novoAgente = {
+    id: emailInput.toLowerCase(),
+    nome: nomeInput,
+    email: emailInput,
+    dataAcesso: new Date().toLocaleString("pt-PT"),
+  };
+
+  // 1. Grava no dispositivo local para resposta instantânea
+  let agentesRegistados = JSON.parse(localStorage.getItem("agentes_registados")) || [];
+  agentesRegistados.push(novoAgente);
+  localStorage.setItem("agentes_registados", JSON.stringify(agentesRegistados));
+  localStorage.setItem("agente_ativo", JSON.stringify(novoAgente));
+
+  // 2. ENVIA PARA O FIREBASE (Sincronização com o teu Painel Admin)
+  if (typeof window.registarAgenteFirebase === "function") {
+    window.registarAgenteFirebase(nomeInput, emailInput);
+  }
+
+  window.location.href = "treino.html";
+}
+function carregarHistoricoAgentes() {
+  const tabelaBody = document.getElementById("tabela-agentes-body");
+  if (!tabelaBody) return;
+
+  // Se o Firebase estiver ativo, escuta diretamente os dados da nuvem
+  if (typeof window.escutarAgentesFirebase === "function") {
+    window.escutarAgentesFirebase((agentesFirebase) => {
+      renderizarTabelaAgentes(agentesFirebase);
+    });
+  } else {
+    // Fallback local se estiver offline
+    let agentesLocais = JSON.parse(localStorage.getItem("agentes_registados")) || [];
+    renderizarTabelaAgentes(agentesLocais);
+  }
+}
+
+function renderizarTabelaAgentes(agentes) {
+  const tabelaBody = document.getElementById("tabela-agentes-body");
+  if (!tabelaBody) return;
+
+  if (agentes.length === 0) {
+    tabelaBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Nenhum agente registrado.</td></tr>`;
+    return;
+  }
+
+  tabelaBody.innerHTML = agentes.map((agente, index) => `
+    <tr>
+      <td><strong>#${index + 1}</strong></td>
+      <td>${escaparHTML(agente.nome)}</td>
+      <td>${escaparHTML(agente.email)}</td>
+      <td>${agente.dataAcesso || "Data não registrada"}</td>
+    </tr>
+  `).join("");
 }
 /* ==========================================================================
    M-CRIMINOLOGIA - ESTRUTURA DE DADOS E LÓGICA DO SISTEMA (CORRIGIDO)
