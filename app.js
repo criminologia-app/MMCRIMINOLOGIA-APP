@@ -1068,43 +1068,6 @@ function apagarMinhaPontuacao() {
   }
 }
 
-// ==========================================================================
-// 3. EXPORTAÇÃO E IMPORTAÇÃO DE RANKING VIA JAVASCRIPT (Para outros telemóveis)
-// ==========================================================================
-
-// Exporta o ranking local num ficheiro .JSON para partilhar com colegas
-function exportarRankingJSON() {
-  const ranking = localStorage.getItem("ranking_agentes") || "[]";
-  const blob = new Blob([ranking], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "ranking_criminologia.json";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// Importa um ficheiro de ranking enviado por outro utilizador
-function importarRankingJSON(inputElement) {
-  const file = inputElement.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    try {
-      const novosDados = JSON.parse(e.target.result);
-      if (Array.isArray(novosDados)) {
-        localStorage.setItem("ranking_agentes", JSON.stringify(novosDados));
-        alert("Ranking atualizado com sucesso!");
-        location.reload();
-      }
-    } catch (err) {
-      alert("Ficheiro inválido.");
-    }
-  };
-  reader.readAsText(file);
-}
 
 // ==========================================================================
 // 4. INICIALIZAÇÃO DA PÁGINA
