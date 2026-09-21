@@ -15,7 +15,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 </head>
  
-<body class="pagina-treino">
+<body>
 
   <div class="bg-glow"></div>
 
@@ -168,12 +168,17 @@ document.addEventListener("DOMContentLoaded", () => {
   <div style="font-family: system-ui, sans-serif; font-size: 12px; color: #888; text-align: center; padding: 10px;">
     <strong style="color: #007bff;">Monteiro & Monteiro Lda</strong>
   </div>
+<button type="button" class="btn-sair" onclick="mmSair()">🚪 Terminar sessão</button>
 <a href="admin.html" class="btn-admin">
   🔒 Painel Administrativo
 </a>
     <!-- Liga esta página ao Firebase ANTES do app.js, para que a pontuação
          seja também gravada no servidor (sincroniza entre dispositivos) -->
     <script type="module" src="firebase-config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="servicos-firebase.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
