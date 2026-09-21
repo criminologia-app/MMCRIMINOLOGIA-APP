@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MM Criminologia — Sala de Conversa</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="chat-extra.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body class="chat-page-body">
+
+  <header class="chat-header">
+    <div class="chat-header-info">
+      <h1>Sala de Conversa</h1>
+      <div id="status-chat-ativo" class="status-badge hidden">
+        <span class="status-pulse"></span>
+        <span id="texto-status-ativo">Chat Ativo</span>
+      </div>
+    </div>
+
+    <div class="chat-header-actions">
+      <button type="button" id="btn-alertas" class="btn-alertas hidden">🔔 Ativar alertas</button>
+
+      <div class="color-picker-wrapper">
+        <label for="chat-cor-usuario">Cor da Bolha:</label>
+        <input type="color" id="chat-cor-usuario" value="#1e3a8a" title="Escolhe a cor das tuas mensagens">
+      </div>
+
+      <a href="pontuacoes.html" class="btn-sair">🚪 Sair</a>
+    </div>
+  </header>
+
+  <main class="chat-container">
+    <div class="chat-user-banner">
+      Agente: <strong id="chat-meu-nome">A carregar...</strong>
+      <span class="chat-aviso">· mensagens apagadas automaticamente após 3 dias</span>
+    </div>
+
+    <!-- Tema do debate (definido por ti na consola do Firebase: chat_config/tema) -->
+    <div id="chat-tema" class="chat-tema hidden">
+      <span class="chat-tema-rotulo">🎙️ Tema em debate</span>
+      <strong id="chat-tema-titulo"></strong>
+      <p id="chat-tema-texto"></p>
+    </div>
+
+    <div id="lista-mensagens-chat" class="chat-messages-area">
+      <p class="chat-vazio">A carregar conversa...</p>
+    </div>
+
+    <!-- Barra de gravação de áudio (aparece só enquanto grava) -->
+    <div id="chat-gravacao" class="chat-gravacao hidden">
+      <span class="rec-ponto"></span>
+      <span>A gravar… <strong id="chat-rec-tempo">0:00</strong></span>
+      <button type="button" id="btn-rec-cancelar" class="btn-rec-cancelar">✖ Cancelar</button>
+      <button type="button" id="btn-rec-enviar" class="btn-rec-enviar">➤ Enviar áudio</button>
+    </div>
+
+    <form id="form-chat" class="chat-input-area">
+      <input type="text" id="chat-texto" placeholder="Escreve a tua mensagem ou argumento..." autocomplete="off" maxlength="1000" required />
+      <button type="button" id="btn-mic" class="btn-mic" title="Gravar mensagem de voz" aria-label="Gravar mensagem de voz">🎤</button>
+      <button type="submit" id="btn-enviar-chat">Enviar</button>
+    </form>
+  </main>
+
+ 
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="servicos-firebase.js"></script>
+  <!-- Esta página é independente: NÃO carrega app.js nem firebase-config.js -->
+  <script src="chat.js"></script>
+</body>
+</html>

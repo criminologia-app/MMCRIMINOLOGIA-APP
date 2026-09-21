@@ -1,0 +1,34 @@
+// SUBSTITUI o bloco antigo de chat_mensagens por este (as regras de chat_config ficam como estavam).
+// Requer: Authentication > Sign-in method > "Anónimo" ATIVADO.
+
+match /chat_mensagens/{id} {
+  allow read: if true;
+
+  // Enviar: tem de ter sessão (anónima serve) e o uidAuth tem de ser o do próprio
+  allow create: if request.auth != null
+    && request.resource.data.uidAuth == request.auth.uid
+    && request.resource.data.keys().hasOnly(
+        ['uid','uidAuth','nome','cor','tipo','texto','audio','audioMime','duracao','dataEnvio','expiraEm'])
+    && request.resource.data.tipo in ['texto','audio']
+    && request.resource.data.nome is string && request.resource.data.nome.size() <= 60
+    && request.resource.data.cor is string && request.resource.data.cor.size() <= 7
+    && request.resource.data.dataEnvio == request.time
+    && request.resource.data.expiraEm is timestamp
+    && request.resource.data.expiraEm <= request.time + duration.value(3, 'd') + duration.value(1, 'h')
+    && (request.resource.data.tipo == 'texto'
+        ? (request.resource.data.texto is string && request.resource.data.texto.size() <= 1000)
+        : (request.resource.data.audio is string && request.resource.data.audio.size() < 900000));
+
+  // Editar: só o autor, só mensagens de texto, só o texto (não dá para prolongar a validade)
+  allow update: if request.auth != null
+    && resource.data.uidAuth == request.auth.uid
+    && resource.data.tipo == 'texto'
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['texto','editada','editadaEm'])
+    && request.resource.data.texto is string
+    && request.resource.data.texto.size() > 0
+    && request.resource.data.texto.size() <= 1000;
+
+  // Apagar: só o autor (ou o administrador)
+  allow delete: if request.auth != null
+    && (resource.data.uidAuth == request.auth.uid || ehAdmin());
+}

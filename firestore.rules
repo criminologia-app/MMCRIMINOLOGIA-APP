@@ -1,0 +1,108 @@
+rules_version = '2';
+
+// REGRAS COMPLETAS — substituem TODAS as regras atuais (Firestore > Regras > colar > Publicar).
+// 1) Troca COLOCA_AQUI_O_TEU_EMAIL@exemplo.com (minúsculas) pelo e-mail do administrador.
+// 2) Se usas outras coleções além das listadas, acrescenta-as, senão ficam bloqueadas.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function ehAdmin() {
+      return request.auth != null
+          && request.auth.token.email == 'COLOCA_AQUI_O_TEU_EMAIL@exemplo.com';
+    }
+
+    // Se a mensagem traz uidAuth, tem de ser o do próprio (sessão anónima). Sem uidAuth também é aceite.
+    function assinaturaValida() {
+      return !('uidAuth' in request.resource.data)
+          || (request.auth != null && request.resource.data.uidAuth == request.auth.uid);
+    }
+
+    // ------------------------------------------------------------ RANKING GLOBAL
+    match /ranking_agentes/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.nome is string
+                            && request.resource.data.nome.size() <= 60
+                            && request.resource.data.pontos is number
+                            && request.resource.data.cadeiras is list;
+      allow delete: if ehAdmin();
+    }
+
+    // ------------------------------------------------------------ CHAT
+    match /chat_mensagens/{id} {
+      allow read: if true;
+
+      allow create: if assinaturaValida()
+        && request.resource.data.keys().hasOnly(
+            ['uid','uidAuth','nome','cor','tipo','texto','audio','audioMime','duracao','dataEnvio','expiraEm'])
+        && request.resource.data.tipo in ['texto','audio']
+        && request.resource.data.nome is string && request.resource.data.nome.size() <= 60
+        && request.resource.data.cor is string && request.resource.data.cor.size() <= 7
+        && request.resource.data.dataEnvio == request.time
+        && request.resource.data.expiraEm is timestamp
+        && request.resource.data.expiraEm <= request.time + duration.value(3, 'd') + duration.value(1, 'h')
+        && (request.resource.data.tipo == 'texto'
+            ? (request.resource.data.texto is string && request.resource.data.texto.size() <= 1000)
+            : (request.resource.data.audio is string && request.resource.data.audio.size() < 900000));
+
+      allow update: if request.auth != null
+        && resource.data.get('uidAuth', null) == request.auth.uid
+        && resource.data.tipo == 'texto'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['texto','editada','editadaEm'])
+        && request.resource.data.texto is string
+        && request.resource.data.texto.size() > 0
+        && request.resource.data.texto.size() <= 1000;
+
+      allow delete: if request.auth != null
+        && (resource.data.get('uidAuth', null) == request.auth.uid || ehAdmin());
+    }
+
+    match /chat_config/{id} {
+      allow read: if true;
+      allow write: if false;   // o tema do debate define-se na consola do Firebase
+    }
+
+    // ------------------------------------------------------------ SUGESTÕES
+    match /sugestoes/{id} {
+      allow create: if assinaturaValida()
+                    && request.resource.data.keys().hasOnly(['autor','texto','data','uidAuth'])
+                    && request.resource.data.autor is string && request.resource.data.autor.size() <= 60
+                    && request.resource.data.texto is string && request.resource.data.texto.size() <= 2000
+                    && request.resource.data.data == request.time;
+
+      allow read: if ehAdmin()
+                  || (request.auth != null && resource.data.get('uidAuth', null) == request.auth.uid);
+
+      allow update: if request.auth != null
+                    && resource.data.get('uidAuth', null) == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['texto','editadaEm'])
+                    && request.resource.data.texto is string
+                    && request.resource.data.texto.size() > 0
+                    && request.resource.data.texto.size() <= 2000;
+
+      allow delete: if ehAdmin()
+                    || (request.auth != null && resource.data.get('uidAuth', null) == request.auth.uid);
+    }
+
+    // ------------------------------------------------------------ ENTRADAS / SAÍDAS / ONLINE
+    match /acessos/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['uid','nome','email','tipo','data','expiraEm'])
+                    && request.resource.data.tipo in ['entrada','saida']
+                    && request.resource.data.nome is string && request.resource.data.nome.size() <= 60
+                    && request.resource.data.email is string && request.resource.data.email.size() <= 120
+                    && request.resource.data.data == request.time;
+      allow read, delete: if ehAdmin();
+      allow update: if false;
+    }
+
+    match /presenca/{uid} {
+      allow create, update: if request.resource.data.keys().hasOnly(['nome','email','online','entrouEm','saiuEm','ultimoSinal'])
+                            && request.resource.data.nome is string && request.resource.data.nome.size() <= 60
+                            && request.resource.data.email is string && request.resource.data.email.size() <= 120
+                            && request.resource.data.ultimoSinal == request.time;
+      allow read, delete: if ehAdmin();
+    }
+
+    // Tudo o resto fica bloqueado por omissão.
+  }
+}

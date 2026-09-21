@@ -1,0 +1,54 @@
+// JUNTA isto às tuas regras (Firestore > Regras), DENTRO de
+//   match /databases/{database}/documents { ... }
+// Mantém as regras que já tens para ranking, chat, etc.
+// Troca COLOCA_AQUI_O_TEU_EMAIL@exemplo.com (em minúsculas) pelo e-mail do administrador,
+// o mesmo que criaste em Authentication > Users. É o ÚNICO sítio onde ele é configurado.
+
+function ehAdmin() {
+  return request.auth != null
+      && request.auth.token.email == 'COLOCA_AQUI_O_TEU_EMAIL@exemplo.com';
+}
+
+// Sugestões: qualquer pessoa (com sessão anónima) ENVIA; cada autor lê, edita e apaga
+// as SUAS; o administrador lê e apaga todas.
+match /sugestoes/{id} {
+  allow create: if request.auth != null
+                && request.resource.data.uidAuth == request.auth.uid
+                && request.resource.data.keys().hasOnly(['autor','texto','data','uidAuth'])
+                && request.resource.data.autor is string && request.resource.data.autor.size() <= 60
+                && request.resource.data.texto is string && request.resource.data.texto.size() <= 2000
+                && request.resource.data.data == request.time;
+
+  allow read: if ehAdmin()
+              || (request.auth != null && resource.data.uidAuth == request.auth.uid);
+
+  allow update: if request.auth != null
+                && resource.data.uidAuth == request.auth.uid
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['texto','editadaEm'])
+                && request.resource.data.texto is string
+                && request.resource.data.texto.size() > 0
+                && request.resource.data.texto.size() <= 2000;
+
+  allow delete: if ehAdmin()
+                || (request.auth != null && resource.data.uidAuth == request.auth.uid);
+}
+
+// Registo de entradas e saídas: qualquer pessoa regista, só o administrador lê
+match /acessos/{id} {
+  allow create: if request.resource.data.keys().hasOnly(['uid','nome','email','tipo','data','expiraEm'])
+                && request.resource.data.tipo in ['entrada','saida']
+                && request.resource.data.nome is string && request.resource.data.nome.size() <= 60
+                && request.resource.data.email is string && request.resource.data.email.size() <= 120
+                && request.resource.data.data == request.time;
+  allow read, delete: if ehAdmin();
+  allow update: if false;
+}
+
+// Quem está online agora
+match /presenca/{uid} {
+  allow create, update: if request.resource.data.keys().hasOnly(['nome','email','online','entrouEm','saiuEm','ultimoSinal'])
+                        && request.resource.data.nome is string && request.resource.data.nome.size() <= 60
+                        && request.resource.data.email is string && request.resource.data.email.size() <= 120
+                        && request.resource.data.ultimoSinal == request.time;
+  allow read, delete: if ehAdmin();
+}

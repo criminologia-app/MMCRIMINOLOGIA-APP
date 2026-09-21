@@ -1,0 +1,72 @@
+/* Extras do chat: áudio, hora, gravação, tema do debate, alertas.
+   Carregar DEPOIS de styles.css */
+.chat-hora { align-self: flex-end; font-size: 0.68rem; opacity: 0.7; margin-top: 4px; }
+.chat-aviso { opacity: 0.7; font-size: 0.78rem; margin-left: 4px; }
+.chat-bubble { box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+
+.chat-audio { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chat-audio audio { height: 36px; max-width: 220px; }
+.chat-audio-dur { font-size: 0.75rem; opacity: 0.85; }
+
+.btn-mic {
+  background: #0f172a; border: 1px solid #334155; color: #fff;
+  width: 46px; border-radius: 6px; font-size: 1.15rem; cursor: pointer;
+}
+.btn-mic:hover { background: #1e293b; }
+
+.chat-gravacao {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 10px; padding: 10px 14px; border-radius: 8px;
+  background: rgba(239,68,68,0.12); border: 1px solid #ef4444; color: #fecaca;
+}
+.chat-gravacao.hidden, .chat-input-area.hidden { display: none !important; }
+.rec-ponto {
+  width: 12px; height: 12px; border-radius: 50%; background: #ef4444;
+  animation: pulso 1s infinite;
+}
+.btn-rec-cancelar, .btn-rec-enviar {
+  border: none; border-radius: 6px; padding: 8px 14px; font-weight: 700; cursor: pointer; color: #fff;
+}
+.btn-rec-cancelar { background: #475569; margin-left: auto; }
+.btn-rec-enviar { background: #16a34a; }
+
+.chat-tema {
+  margin: 8px 0; padding: 10px 14px; border-radius: 8px;
+  background: rgba(37,99,235,0.15); border-left: 4px solid #2563eb; color: #e2e8f0;
+}
+.chat-tema-rotulo { display: block; font-size: 0.72rem; letter-spacing: .04em; text-transform: uppercase; opacity: .75; }
+.chat-tema p { margin: 4px 0 0; font-size: 0.9rem; }
+.chat-tema.hidden { display: none; }
+
+.btn-alertas {
+  background: #f59e0b; color: #1c1917; border: none; border-radius: 6px;
+  padding: 6px 12px; font-weight: 700; font-size: 0.85rem; cursor: pointer;
+}
+.btn-alertas.hidden { display: none; }
+
+@media (max-width: 600px) {
+  .chat-header-actions { flex-wrap: wrap; gap: 8px; }
+  .chat-bubble { max-width: 88%; }
+}
+
+/* Editar / apagar as minhas mensagens */
+.chat-bubble { position: relative; }
+.chat-acoes {
+  position: absolute; top: 4px; right: 6px; display: flex; gap: 2px;
+  opacity: 0.55; transition: opacity .15s;
+}
+.chat-bubble:hover .chat-acoes, .chat-acoes:focus-within { opacity: 1; }
+.chat-acoes button {
+  background: rgba(0,0,0,0.25); border: none; border-radius: 4px;
+  font-size: 0.8rem; padding: 2px 5px; cursor: pointer; line-height: 1;
+}
+.chat-edit-area {
+  width: 100%; min-height: 60px; margin-top: 6px; padding: 8px; box-sizing: border-box;
+  border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; font: inherit;
+}
+.chat-edit-barra { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.chat-edit-barra button {
+  border: none; border-radius: 6px; padding: 5px 12px; font-weight: 700; cursor: pointer;
+  background: #475569; color: #fff;
+}
+.chat-edit-barra button:last-child { background: #16a34a; }
