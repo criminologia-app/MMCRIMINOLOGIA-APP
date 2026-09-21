@@ -1,4 +1,3 @@
-
 /* Firebase / Firestore — ficheiro carregado pelas páginas treino.html e pontuacoes.html. */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
@@ -71,4 +70,3 @@ window.firebaseAtualizarProgresso = firebaseAtualizarProgresso;
 window.firebaseEscutarRanking = firebaseEscutarRanking;
 window.dispatchEvent(new Event("firebase-pronto"));
 console.info("Firebase carregado para o projeto", firebaseConfig.projectId);
-
