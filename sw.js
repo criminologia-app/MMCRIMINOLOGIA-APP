@@ -1,7 +1,7 @@
-// IMPORTANTE: muda este número sempre que publicares uma atualização
-// (novo CSS, novo HTML, etc.). É o que obriga o service worker a
-// instalar-se de novo e a limpar a cache antiga.
-const CACHE_NAME = "m-criminologia-v5";
+// Estratégia "rede primeiro": tenta sempre a versão mais recente do site e só usa a cópia
+// guardada quando estás offline. Assim uma atualização nunca fica presa numa versão antiga.
+// Mesmo assim, sobe este número quando alterares ficheiros, para limpar caches antigos.
+const CACHE_NAME = "m-criminologia-v9";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,72 +9,65 @@ const ASSETS = [
   "./admin.html",
   "./pontuacoes.html",
   "./sugestoes.html",
+  "./chat.html",
   "./styles.css",
+  "./chat-extra.css",
   "./app.js",
+  "./chat.js",
+  "./servicos-firebase.js",
   "./firebase-config.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
 ];
 
-// Ficheiros que devem SEMPRE tentar ir à rede primeiro (código que muda com frequência).
-// Só cai para a cache se não houver internet.
-const NETWORK_FIRST = [".html", ".css", ".js"];
-
-function isNetworkFirst(url) {
-  return NETWORK_FIRST.some((ext) => url.pathname.endsWith(ext)) || url.pathname === "/" || url.pathname.endsWith("/");
-}
-
-self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-
-  // Ignorar pedidos de outros domínios (ex: Firebase, fontes externas)
-  if (url.origin !== self.location.origin) return;
-
-  if (isNetworkFirst(url)) {
-    // REDE PRIMEIRO: tenta buscar a versão mais recente; se falhar (offline), usa a cache.
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
-    );
-  } else {
-    // CACHE PRIMEIRO: para imagens/ícones, que raramente mudam (mais rápido e poupa dados).
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        return cachedResponse || fetch(event.request);
-      })
-    );
-  }
-});
-
-// Este script garante que o app funcione offline depois de ser aberto pela primeira vez,
-// mas prioriza sempre a versão mais recente quando há internet (ver isNetworkFirst acima).
 self.addEventListener("install", (event) => {
+  // Guarda cada ficheiro individualmente: se um faltar, os outros continuam a ser guardados
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    }),
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(ASSETS.map((url) => cache.add(url).catch(() => null))),
+    ),
   );
   self.skipWaiting();
 });
 
-// Ativação do Service Worker: remove caches antigos (v1, v2, v3...) e assume o controle
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((nomes) => {
-        return Promise.all(
-          nomes
-            .filter((nome) => nome !== CACHE_NAME)
-            .map((nome) => caches.delete(nome)),
-        );
-      })
+      .then((nomes) => Promise.all(nomes.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))))
       .then(() => self.clients.claim()),
+  );
+});
+
+// Só trata pedidos GET do próprio site; Firebase e outros domínios vão direto à rede.
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+
+  event.respondWith(
+    fetch(req)
+      .then((resposta) => {
+        if (resposta && resposta.ok) {
+          const copia = resposta.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copia));
+        }
+        return resposta;
+      })
+      .catch(() => caches.match(req).then((guardada) => guardada || caches.match("./index.html"))),
+  );
+});
+
+// Ao tocar na notificação, abre (ou traz para a frente) o chat
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const alvo = (event.notification.data && event.notification.data.url) || "chat.html";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((janelas) => {
+      for (const j of janelas) {
+        if (j.url.includes("chat.html") && "focus" in j) return j.focus();
+      }
+      return self.clients.openWindow(alvo);
+    }),
   );
 });
