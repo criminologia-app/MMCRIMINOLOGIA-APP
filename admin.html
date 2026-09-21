@@ -5,18 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>M-Criminologia | Painel Administrativo</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
   
 </head>
 <body>
 
-  <!-- TELA DE AUTENTICAÇÃO POR SENHA -->
+  <!-- TELA DE AUTENTICAÇÃO (Firebase Authentication) -->
   <div id="modal-auth">
     <div class="auth-box">
       <h2>🔒 Acesso Restrito</h2>
-      <p>Introduza a senha de Administrador:</p>
-      <input type="password" id="senha-admin" placeholder="Digite a senha...">
-      <button onclick="validarAcessoAdmin()">Entrar no Painel</button>
-      <p id="erro-senha" style="color: #f85149; display: none; margin-top: 10px; font-weight: bold;">Senha incorreta!</p>
+      <p>Entra com a conta de Administrador:</p>
+      <input type="email" id="email-admin" placeholder="E-mail" autocomplete="username">
+      <input type="password" id="senha-admin" placeholder="Senha" autocomplete="current-password">
+      <button id="btn-entrar-admin" onclick="validarAcessoAdmin()">Entrar no Painel</button>
+      <p id="erro-senha" style="color: #f85149; display: none; margin-top: 10px; font-weight: bold;"></p>
+      <p style="margin-top: 12px; font-size: .85rem;">
+        <a href="#" id="link-recuperar" style="color: #58a6ff;">Esqueci a senha</a>
+      </p>
     </div>
   </div>
 
@@ -24,15 +32,12 @@
   <div id="conteudo-painel" class="admin-container hidden">
     <header class="admin-header">
       <h1 class="admin-title">📊 Painel do Sistema</h1>
-      <a href="index.html" class="btn-sair">Sair do Painel</a>
+      <a href="index.html" class="btn-sair" onclick="window.mmAdminSair && mmAdminSair()">Sair do Painel</a>
     </header>
 
     <!-- Tabela de Usuários -->
-    <!-- Script da Configuração do Firebase -->
-  <script type="module" src="firebase-config.js"></script>
-  <script src="app.js"></script>
     <section class="admin-section">
-      <h2 class="admin-section-title">👥 Agentes Registrados (Histórico de Acesso)</h2>
+      <h2 class="admin-section-title">👥 Agentes (quem está online e quem saiu)</h2>
       <div class="table-responsive">
         <table class="admin-table">
           <thead>
@@ -40,7 +45,8 @@
               <th style="width: 60px;">ID</th>
               <th>Nome do Criminólogo</th>
               <th>E-mail</th>
-              <th style="width: 200px;">Data e Hora</th>
+              <th style="width: 110px;">Estado</th>
+              <th style="width: 240px;">Última atividade</th>
             </tr>
           </thead>
           <tbody id="tabela-agentes-body">
@@ -51,6 +57,24 @@
     </section>
 
 
+
+
+    <!-- Registo de entradas e saídas -->
+    <section class="admin-section">
+      <h2 class="admin-section-title">🚪 Registo de Entradas e Saídas (últimos 100)</h2>
+      <div class="table-responsive">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th style="width: 200px;">Data e Hora</th>
+              <th>Agente</th>
+              <th style="width: 120px;">Evento</th>
+            </tr>
+          </thead>
+          <tbody id="tabela-acessos-body"></tbody>
+        </table>
+      </div>
+    </section>
 
     <!-- Tabela de Sugestões -->
     <section class="admin-section">
@@ -73,6 +97,86 @@
     </section>
   </div>
 
+  
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="servicos-firebase.js"></script>
   <script src="app.js"></script>
+  <script>
+    const MENSAGENS_ERRO = {
+      "auth/invalid-credential": "E-mail ou senha incorretos.",
+      "auth/wrong-password": "E-mail ou senha incorretos.",
+      "auth/user-not-found": "E-mail ou senha incorretos.",
+      "auth/invalid-email": "E-mail inválido.",
+      "auth/too-many-requests": "Demasiadas tentativas. Aguarda alguns minutos e tenta de novo.",
+      "auth/network-request-failed": "Sem ligação à internet.",
+      "auth/operation-not-allowed": "Ativa o método E-mail/senha no Firebase Authentication.",
+    };
+
+    function mostrarErro(texto) {
+      const erro = document.getElementById("erro-senha");
+      erro.style.color = "#f85149";
+      erro.textContent = texto;
+      erro.style.display = "block";
+    }
+
+    async function validarAcessoAdmin() {
+      const email = document.getElementById("email-admin").value;
+      const senha = document.getElementById("senha-admin").value;
+      const botao = document.getElementById("btn-entrar-admin");
+      if (!email || !senha) return mostrarErro("Preenche o e-mail e a senha.");
+
+      botao.disabled = true;
+      botao.textContent = "A verificar...";
+      try {
+        await window.mmAdminEntrar(email, senha);
+        document.getElementById("erro-senha").style.display = "none";
+        document.getElementById("senha-admin").value = "";
+        // O painel abre em mmAdminObservar, assim que a sessão fica confirmada
+      } catch (e) {
+        console.error(e);
+        if (e.message === "sem-permissao") mostrarErro("Esta conta não tem permissão de administrador.");
+        else if (e.message === "auth-indisponivel") mostrarErro("Sem ligação ao Firebase.");
+        else mostrarErro(MENSAGENS_ERRO[e.code] || "Não foi possível entrar. Tenta de novo.");
+      } finally {
+        botao.disabled = false;
+        botao.textContent = "Entrar no Painel";
+      }
+    }
+
+    ["email-admin", "senha-admin"].forEach((id) =>
+      document.getElementById(id).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") validarAcessoAdmin();
+      })
+    );
+
+    document.getElementById("link-recuperar").addEventListener("click", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email-admin").value;
+      if (!email) return mostrarErro("Escreve o teu e-mail e clica outra vez em \"Esqueci a senha\".");
+      try {
+        await window.mmAdminRecuperar(email);
+      } catch (err) {
+        console.error(err);
+      }
+      const aviso = document.getElementById("erro-senha");
+      aviso.style.color = "#3fb950";
+      aviso.textContent = "Se o e-mail existir, enviámos um link para redefinir a senha.";
+      aviso.style.display = "block";
+    });
+
+    let painelAberto = false;
+    if (window.mmAdminObservar) {
+      window.mmAdminObservar((eAdmin) => {
+        if (!eAdmin || painelAberto) return;
+        painelAberto = true;
+        window.mmAdminAutenticado = true;
+        document.getElementById("modal-auth").classList.add("hidden");
+        document.getElementById("conteudo-painel").classList.remove("hidden");
+        carregarDadosAdm();
+      });
+    }
+  </script>
 </body>
 </html>
