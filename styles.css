@@ -36,20 +36,6 @@ body {
     position: relative;
 }
 
-/* Classe de segurança: garante que a página de treino nunca herda o padding
-   ou a centragem definidos mais abaixo neste ficheiro para OUTRAS páginas
-   (login/boas-vindas). Uma classe tem mais prioridade que "body" sozinho,
-   por isso esta regra ganha sempre, independentemente da ordem no ficheiro. */
-body.pagina-treino {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-}
-
 /* Fundo Iluminado */
 .bg-glow {
     position: fixed;
@@ -66,30 +52,19 @@ body.pagina-treino {
 /* Header */
 .app-header {
     display: flex;
-    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    gap: 0.6rem;
-    width: 100%;
-    margin: 0;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 2rem;
     background: rgba(6, 8, 14, 0.85);
     border-bottom: 1px solid var(--silver-border);
-    border-radius: 0;
     backdrop-filter: blur(10px);
-    box-sizing: border-box;
 }
 
 .logo-container {
     font-family: var(--font-title);
-    font-size: clamp(1rem, 4vw, 1.5rem);
+    font-size: 1.5rem;
     font-weight: 900;
     letter-spacing: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1 1 auto;
-    min-width: 0;
 }
 
 .logo-prefix {
@@ -102,60 +77,31 @@ body.pagina-treino {
 
 .user-stats-bar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    flex: 2 1 auto;
-    justify-content: flex-end;
-    min-width: 0;
+    gap: 1.5rem;
 }
 
 .stat-badge {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--silver-border);
-    padding: 0.3rem 0.6rem;
+    padding: 0.4rem 1rem;
     border-radius: 6px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    flex: 1 1 70px;
-    min-width: 60px;
 }
 
 .stat-label {
-    font-size: clamp(0.55rem, 1.8vw, 0.7rem);
+    font-size: 0.7rem;
     text-transform: uppercase;
     color: var(--silver-mid);
     letter-spacing: 1px;
-    white-space: nowrap;
 }
 
 .stat-value {
     font-family: var(--font-sub);
-    font-size: clamp(0.9rem, 3vw, 1.2rem);
+    font-size: 1.2rem;
     font-weight: 700;
     color: var(--blue-primary);
-}
-
-/* Em ecrãs pequenos, o logo passa para cima e as estatísticas para baixo,
-   ocupando toda a largura, para nunca serem cortadas */
-@media (max-width: 480px) {
-    .app-header {
-        padding: 0.5rem 0.75rem;
-    }
-    .logo-container {
-        flex: 1 1 100%;
-        text-align: left;
-    }
-    .user-stats-bar {
-        flex: 1 1 100%;
-        justify-content: space-between;
-        gap: 0.4rem;
-    }
-    .stat-badge {
-        flex: 1 1 0;
-        min-width: 0;
-        padding: 0.3rem 0.4rem;
-    }
 }
 
 /* Layout dos Ecrãs */
@@ -735,7 +681,7 @@ body.pagina-treino {
     box-sizing: border-box;
 }
 
-body.pagina-boas-vindas {
+body {
     margin: 0;
     padding: 0;
     width: 100vw;
@@ -849,7 +795,7 @@ canvas {
     padding: 0;
 }
 
-body.pagina-boas-vindas {
+body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: #0b0f19;
     /* Fundo escuro tom policial/forense */
@@ -1476,24 +1422,22 @@ body.pagina-boas-vindas {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* tabela de pontuações — regras isoladas com .pagina-pontuacoes para não
-   afetarem as outras páginas (era isto que estava a causar o espaçamento
-   e a mudar a fonte em todo o site) */
+/* tabela de pontuações */
 
-body.pagina-pontuacoes {
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
     background-color: #0f172a;
     color: #f8fafc;
     padding: 20px;
-    margin: 0;
-    box-sizing: border-box;
 }
 
-body.pagina-pontuacoes * {
-    box-sizing: border-box;
-}
-
-.pagina-pontuacoes .container {
+.container {
     max-width: 950px;
     margin: 0 auto;
     background: #1e293b;
@@ -1502,7 +1446,7 @@ body.pagina-pontuacoes * {
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
 }
 
-.pagina-pontuacoes header {
+header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1511,7 +1455,7 @@ body.pagina-pontuacoes * {
     padding-bottom: 15px;
 }
 
-.pagina-pontuacoes h1 {
+h1 {
     font-size: 22px;
     color: #38bdf8;
     display: flex;
@@ -1519,7 +1463,7 @@ body.pagina-pontuacoes * {
     gap: 10px;
 }
 
-.pagina-pontuacoes .btn-voltar {
+.btn-voltar {
     background: #334155;
     color: #fff;
     text-decoration: none;
@@ -1529,24 +1473,24 @@ body.pagina-pontuacoes * {
     transition: 0.2s;
 }
 
-.pagina-pontuacoes .btn-voltar:hover {
+.btn-voltar:hover {
     background: #475569;
 }
 
-.pagina-pontuacoes table {
+table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
 }
 
-.pagina-pontuacoes th,
-.pagina-pontuacoes td {
+th,
+td {
     padding: 14px;
     text-align: left;
     border-bottom: 1px solid #334155;
 }
 
-.pagina-pontuacoes th {
+th {
     background-color: #0f172a;
     color: #94a3b8;
     font-size: 13px;
@@ -1554,25 +1498,25 @@ body.pagina-pontuacoes * {
     letter-spacing: 0.5px;
 }
 
-.pagina-pontuacoes tr:nth-child(1) .posicao {
+tr:nth-child(1) .posicao {
     color: #facc15;
     font-weight: bold;
     font-size: 18px;
 }
 
-.pagina-pontuacoes tr:nth-child(2) .posicao {
+tr:nth-child(2) .posicao {
     color: #94a3b8;
     font-weight: bold;
     font-size: 16px;
 }
 
-.pagina-pontuacoes tr:nth-child(3) .posicao {
+tr:nth-child(3) .posicao {
     color: #b45309;
     font-weight: bold;
     font-size: 16px;
 }
 
-.pagina-pontuacoes .badge-nivel {
+.badge-nivel {
     padding: 4px 10px;
     border-radius: 20px;
     font-size: 12px;
@@ -1582,13 +1526,13 @@ body.pagina-pontuacoes * {
     display: inline-block;
 }
 
-.pagina-pontuacoes .pontos-destaque {
+.pontos-destaque {
     color: #4ade80;
     font-weight: bold;
     font-size: 15px;
 }
 
-.pagina-pontuacoes .tag-disciplina {
+.tag-disciplina {
     font-size: 11px;
     display: inline-block;
     margin: 2px 3px;
@@ -1596,4 +1540,221 @@ body.pagina-pontuacoes * {
     padding: 3px 7px;
     border-radius: 4px;
     color: #e2e8f0;
+}
+/* Layout da Página de Chat */
+.chat-page-body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    background-color: #f4f6f9;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+.chat-header {
+    background-color: #0f172a;
+    color: #ffffff;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.chat-header-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.chat-header h1 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+/* Indicador de Chat Ativo */
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(34, 197, 94, 0.15);
+    border: 1px solid #22c55e;
+    color: #4ade80;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-pulse {
+    width: 8px;
+    height: 8px;
+    background-color: #22c55e;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #22c55e;
+    animation: pulso 1.5s infinite;
+}
+
+@keyframes pulso {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+}
+
+.chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.color-picker-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+
+.color-picker-wrapper input[type="color"] {
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    background: none;
+}
+
+.btn-sair {
+    background-color: #ef4444;
+    color: #fff;
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.btn-sair:hover {
+    background-color: #dc2626;
+}
+
+/* Contentor do Chat */
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 15px;
+    box-sizing: border-box;
+}
+
+.chat-user-banner {
+    background-color: #e2e8f0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #334155;
+    margin-bottom: 10px;
+}
+
+.chat-messages-area {
+    flex: 1;
+    overflow-y: auto;
+    background: #2e2d74;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Bolhas de Mensagem com Nome em Cima */
+.chat-bubble {
+    max-width: 75%;
+    align-self: flex-start;
+    background-color: #d6d6d6;
+    color: #0f172a;
+    padding: 10px 14px;
+    border-radius: 12px 12px 12px 2px;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-bubble-minha {
+    align-self: flex-end;
+    border-radius: 12px 12px 2px 12px;
+    color: #ffffff;
+}
+
+.chat-autor {
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin-bottom: 4px;
+    opacity: 0.9;
+}
+
+.chat-texto {
+    margin: 0;
+    font-size: 0.95rem;
+    word-break: break-word;
+}
+
+.chat-input-area {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.chat-input-area input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    outline: none;
+}
+
+.chat-input-area button {
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    padding: 0 20px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+}
+/* ==========================================
+   BOTÃO DE ACESSO AO CHAT (.btn-ir-chat)
+   ========================================== */
+
+.btn-chat {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #2563eb;
+    color: #ffffff;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+/* Efeito ao passar o cursor */
+.btn-chat:hover {
+    background: linear-gradient(135deg, #102350 0%, #0f1c47 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(5, 16, 39, 0.4);
 }
