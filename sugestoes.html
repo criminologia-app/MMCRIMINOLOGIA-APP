@@ -5,6 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>M-Criminologia | Caixa de Sugestões</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    .minhas-sugestoes { margin-top: 28px; }
+    .minhas-sugestoes h3 { margin-bottom: 4px; }
+    .minhas-sub { font-size: .85rem; opacity: .7; margin: 0 0 12px; }
+    .sug-item { background: rgba(255,255,255,0.06); border: 1px solid #334155; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .sug-item p { margin: 0 0 6px; white-space: pre-wrap; word-break: break-word; }
+    .sug-meta { font-size: .75rem; opacity: .65; }
+    .sug-botoes { display: flex; gap: 8px; margin-top: 8px; }
+    .sug-botoes button { border: none; border-radius: 6px; padding: 6px 12px; font-weight: 700; cursor: pointer; color: #fff; background: #475569; }
+    .sug-botoes .perigo { background: #dc2626; }
+    .sug-botoes .ok { background: #16a34a; }
+    .sug-item textarea { width: 100%; min-height: 80px; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; font: inherit; }
+  </style>
 </head>
 <body>
 
@@ -28,10 +45,93 @@
       </button>
     </form>
     
+    <section class="minhas-sugestoes" id="minhas-sugestoes" hidden>
+      <h3>📝 As minhas sugestões</h3>
+      <p class="minhas-sub">Podes editar ou apagar o que enviaste neste aparelho.</p>
+      <div id="lista-minhas-sugestoes"></div>
+    </section>
+
     <div class="back-link-container">
       <a href="index.html" class="back-link">← Voltar ao Início</a>
     </div>
   </main>
-   <script src="app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="servicos-firebase.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // Lista as sugestões deste aparelho, com editar e apagar
+    (function () {
+      const secao = document.getElementById("minhas-sugestoes");
+      const caixa = document.getElementById("lista-minhas-sugestoes");
+      if (typeof window.mmMinhasSugestoes !== "function") return;
+
+      function desenhar(lista) {
+        caixa.innerHTML = "";
+        secao.hidden = lista.length === 0;
+        lista.forEach((sug) => {
+          const item = document.createElement("div");
+          item.className = "sug-item";
+
+          const texto = document.createElement("p");
+          texto.textContent = sug.texto;
+          const meta = document.createElement("span");
+          meta.className = "sug-meta";
+          meta.textContent = sug.data + (sug.editada ? " · editada" : "");
+
+          const botoes = document.createElement("div");
+          botoes.className = "sug-botoes";
+          const bEditar = document.createElement("button");
+          bEditar.textContent = "✏️ Editar";
+          const bApagar = document.createElement("button");
+          bApagar.textContent = "🗑️ Apagar";
+          bApagar.className = "perigo";
+          botoes.append(bEditar, bApagar);
+
+          bApagar.addEventListener("click", () => {
+            if (!confirm("Apagar esta sugestão?")) return;
+            window.mmApagarSugestao(sug.id).catch(() => alert("Não foi possível apagar agora."));
+          });
+
+          bEditar.addEventListener("click", () => {
+            const area = document.createElement("textarea");
+            area.value = sug.texto;
+            area.maxLength = 2000;
+            const b2 = document.createElement("div");
+            b2.className = "sug-botoes";
+            const cancelar = document.createElement("button");
+            cancelar.textContent = "Cancelar";
+            const guardar = document.createElement("button");
+            guardar.textContent = "Guardar";
+            guardar.className = "ok";
+            b2.append(cancelar, guardar);
+            item.replaceChildren(area, b2);
+            area.focus();
+
+            cancelar.addEventListener("click", () => desenhar(ultima));
+            guardar.addEventListener("click", () => {
+              const novo = area.value.trim();
+              if (!novo) return;
+              guardar.disabled = true;
+              window.mmEditarSugestao(sug.id, novo).catch(() => {
+                alert("Não foi possível guardar agora.");
+                guardar.disabled = false;
+              });
+            });
+          });
+
+          item.append(texto, meta, botoes);
+          caixa.appendChild(item);
+        });
+      }
+
+      let ultima = [];
+      window.mmMinhasSugestoes((lista) => {
+        ultima = lista;
+        desenhar(lista);
+      }, (e) => console.error("Minhas sugestões:", e));
+    })();
+  </script>
 </body>
 </html>
