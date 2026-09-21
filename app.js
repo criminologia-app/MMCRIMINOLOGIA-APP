@@ -1,12 +1,15 @@
-// --------------------------------------------------------------------------
-// ESTADO DA APLICAÇÃO
-// --------------------------------------------------------------------------
+// ==========================================================================
+// M-CRIMINOLOGIA — app.js
+// Script único, carregado (como <script> normal, não "module") por todas as
+// páginas. Cada função verifica se os elementos de que precisa existem no
+// HTML da página atual antes de fazer alguma coisa, por isso é seguro ter
+// tudo num único ficheiro partilhado.
+// ==========================================================================
 
+// --------------------------------------------------------------------------
+// ESTADO DA APLICAÇÃO (sessão de treino em curso)
+// --------------------------------------------------------------------------
 let estadoGlobal = {
-  utilizador: {
-    nome: "",
-    email: "",
-  },
   pontuacaoTotal: 0,
   respostasCertasTotais: 0,
   respostasErradasTotais: 0,
@@ -24,12 +27,17 @@ let quizAtual = {
   timerInterval: null,
   dicaUsada: false,
 };
-// Cole isto no teu app.js (ou num <script> no início do body, antes do app.js)
 
+// --------------------------------------------------------------------------
+// SERVICE WORKER (PWA) — registado uma única vez
+// --------------------------------------------------------------------------
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js");
+  navigator.serviceWorker
+    .register("./sw.js")
+    .then(() => console.log("App pronto para uso offline."))
+    .catch((err) => console.error("Erro ao registar Service Worker:", err));
 
-  // Quando um novo service worker assume o controlo (nova versão publicada),
+  // Quando um novo Service Worker assume o controlo (nova versão publicada),
   // recarrega a página automaticamente para os utilizadores verem a atualização.
   let jaRecarregou = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -38,7 +46,10 @@ if ("serviceWorker" in navigator) {
     window.location.reload();
   });
 }
-// Instância diferida do Contexto de Áudio
+
+// --------------------------------------------------------------------------
+// ÁUDIO (Web Audio API)
+// --------------------------------------------------------------------------
 let audioCtx = null;
 
 function obterContextoAudio() {
@@ -50,13 +61,920 @@ function obterContextoAudio() {
   }
   return audioCtx;
 }
-// Dentro da tua função de login/submissão:
-const inputNome = document.getElementById("nome-usuario");
-if (inputNome) {
-  const nomeAgente = inputNome.value.trim();
 
-  // Salva o nome na chave 'agente_ativo' do navegador
-  localStorage.setItem("agente_ativo", JSON.stringify({ nome: nomeAgente }));
+function tocarSomClique() {
+  const ctx = obterContextoAudio();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(600, ctx.currentTime);
+  gain.gain.setValueAtTime(0.2, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.05);
+}
+
+function tocarSomAcerto() {
+  const ctx = obterContextoAudio();
+  const agora = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(523.25, agora);
+  osc.frequency.setValueAtTime(659.25, agora + 0.1);
+
+  gain.gain.setValueAtTime(0.3, agora);
+  gain.gain.exponentialRampToValueAtTime(0.01, agora + 0.3);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  osc.stop(agora + 0.3);
+}
+
+function tocarSomErro() {
+  const ctx = obterContextoAudio();
+  const agora = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(392.0, agora); // Nota G4
+  osc.frequency.setValueAtTime(311.13, agora + 0.12); // Nota Eb4 (descida suave)
+
+  gain.gain.setValueAtTime(0.16, agora);
+  gain.gain.exponentialRampToValueAtTime(0.001, agora + 0.28);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  osc.stop(agora + 0.28);
+}
+
+// --------------------------------------------------------------------------
+// UTILITÁRIOS
+// --------------------------------------------------------------------------
+function escaparHTML(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function mudarEcra(idEcra) {
+  document
+    .querySelectorAll(".screen")
+    .forEach((s) => s.classList.remove("active"));
+  const ecraAlvo = document.getElementById(idEcra);
+  if (ecraAlvo) ecraAlvo.classList.add("active");
+}
+
+// --------------------------------------------------------------------------
+// INICIALIZAÇÃO GERAL — corre em todas as páginas
+// --------------------------------------------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  // Ecrã de treino (módulos/disciplinas)
+  renderizarModulos();
+  configurarEventos();
+  exibirNomeAgente();
+
+  // Login (index.html)
+  const formLogin = document.getElementById("form-login");
+  if (formLogin) formLogin.addEventListener("submit", processarLogin);
+
+  // Sugestões (sugestoes.html)
+  const formSugestao = document.getElementById("form-sugestao");
+  if (formSugestao)
+    formSugestao.addEventListener("submit", processarEnvioSugestao);
+
+  // Painel Admin (admin.html) — só carrega dados sensíveis depois da senha
+  configurarFiltrosAdmin();
+
+  // Página de Pontuações (pontuacoes.html)
+  inicializarPaginaPontuacoes();
+
+  // Página de Conversa (conversa.html)
+  inicializarChat();
+
+  // Estado/pontuação guardados localmente
+  carregarEstadoSalvo();
+});
+
+// Renderiza Módulos e Disciplinas no Ecrã Principal
+function renderizarModulos() {
+  const container = document.getElementById("modules-container");
+  if (!container) return;
+  if (typeof BANCO_DE_DADOS === "undefined") return;
+  container.innerHTML = "";
+
+  BANCO_DE_DADOS.forEach((modulo) => {
+    const cardModulo = document.createElement("div");
+    cardModulo.className = "module-card";
+
+    const header = document.createElement("div");
+    header.className = "module-header";
+    header.innerHTML = `<span>${modulo.titulo}</span><span>${modulo.disciplinas.length} Disciplinas</span>`;
+
+    const gridDisciplinas = document.createElement("div");
+    gridDisciplinas.className = "disciplines-grid";
+
+    modulo.disciplinas.forEach((disciplina) => {
+      const btn = document.createElement("button");
+      btn.className = "discipline-btn";
+      btn.innerHTML = `<span>${disciplina.nome}</span> <small style="color:var(--blue-primary)">${disciplina.questoes.length} Qs</small>`;
+      btn.onclick = () => {
+        tocarSomClique();
+        iniciarQuiz(modulo, disciplina);
+      };
+      gridDisciplinas.appendChild(btn);
+    });
+
+    cardModulo.appendChild(header);
+    cardModulo.appendChild(gridDisciplinas);
+    container.appendChild(cardModulo);
+  });
+}
+
+// --------------------------------------------------------------------------
+// LÓGICA DO QUIZ
+// --------------------------------------------------------------------------
+function iniciarQuiz(modulo, disciplina) {
+  if (!validarInformacoesUtilizador()) return;
+
+  if (quizAtual.timerInterval) {
+    clearInterval(quizAtual.timerInterval);
+  }
+
+  quizAtual = {
+    modulo: modulo,
+    disciplina: disciplina,
+    questaoIndex: 0,
+    pontuacaoSessao: 0,
+    acertosSessao: 0,
+    errosSessao: 0,
+    tempoInicio: Date.now(),
+    timerInterval: setInterval(atualizarTimer, 1000),
+    dicaUsada: false,
+  };
+
+  document.getElementById("quiz-module-name").textContent = modulo.titulo;
+  document.getElementById("quiz-subject-name").textContent = disciplina.nome;
+
+  mudarEcra("quiz-screen");
+  carregarQuestao();
+}
+
+function carregarQuestao() {
+  const q = quizAtual.disciplina.questoes[quizAtual.questaoIndex];
+  quizAtual.dicaUsada = false;
+
+  const progresso =
+    (quizAtual.questaoIndex / quizAtual.disciplina.questoes.length) * 100;
+  document.getElementById("progress-bar").style.width = `${progresso}%`;
+
+  document.getElementById("question-number").textContent =
+    `Questão ${quizAtual.questaoIndex + 1} de ${quizAtual.disciplina.questoes.length}`;
+  document.getElementById("question-text").textContent = q.pergunta;
+
+  document.getElementById("hint-box").classList.add("hidden");
+  document.getElementById("feedback-box").classList.add("hidden");
+  document.getElementById("btn-hint").disabled = false;
+
+  const btnNext = document.getElementById("btn-next");
+  if (btnNext) btnNext.disabled = true;
+
+  const containerOpcoes = document.getElementById("options-container");
+  containerOpcoes.innerHTML = "";
+
+  q.opcoes.forEach((opcaoText, index) => {
+    const btn = document.createElement("button");
+    btn.className = "option-btn";
+    btn.textContent = `${String.fromCharCode(65 + index)}) ${opcaoText}`;
+    btn.onclick = () => verificarResposta(index);
+    containerOpcoes.appendChild(btn);
+  });
+}
+
+function verificarResposta(indiceSelecionado) {
+  const q = quizAtual.disciplina.questoes[quizAtual.questaoIndex];
+  const botoes = document.querySelectorAll(".option-btn");
+
+  botoes.forEach((b) => (b.disabled = true));
+
+  const statusBox = document.getElementById("feedback-status");
+  const feedbackBox = document.getElementById("feedback-box");
+  const rationaleText = document.getElementById("rationale-text");
+
+  if (indiceSelecionado === q.respostaCorreta) {
+    tocarSomAcerto();
+    botoes[indiceSelecionado].classList.add("correct");
+    statusBox.textContent = "✓ RESPOSTA CORRETA";
+    statusBox.className = "feedback-status success";
+
+    let pontosGanhos = 100 - (quizAtual.dicaUsada ? 50 : 0);
+    quizAtual.pontuacaoSessao += pontosGanhos;
+    quizAtual.acertosSessao++;
+  } else {
+    tocarSomErro();
+    botoes[indiceSelecionado].classList.add("wrong");
+    botoes[q.respostaCorreta].classList.add("correct");
+    statusBox.textContent = "✕ RESPOSTA INCORRETA";
+    statusBox.className = "feedback-status error";
+
+    quizAtual.errosSessao++;
+  }
+
+  rationaleText.textContent = q.justificativa;
+  feedbackBox.classList.remove("hidden");
+
+  const btnNext = document.getElementById("btn-next");
+  if (btnNext) btnNext.disabled = false;
+}
+
+// --------------------------------------------------------------------------
+// DICA, TIMER E EVENTOS DO QUIZ
+// --------------------------------------------------------------------------
+function configurarEventos() {
+  const btnHint = document.getElementById("btn-hint");
+  if (btnHint) {
+    btnHint.onclick = () => {
+      tocarSomClique();
+      const q = quizAtual.disciplina.questoes[quizAtual.questaoIndex];
+      document.getElementById("hint-text").textContent = q.dica;
+      document.getElementById("hint-box").classList.remove("hidden");
+      document.getElementById("btn-hint").disabled = true;
+      quizAtual.dicaUsada = true;
+    };
+  }
+
+  const btnNext = document.getElementById("btn-next");
+  if (btnNext) {
+    btnNext.onclick = () => {
+      tocarSomClique();
+      quizAtual.questaoIndex++;
+      if (quizAtual.questaoIndex < quizAtual.disciplina.questoes.length) {
+        carregarQuestao();
+      } else {
+        finalizarQuiz();
+      }
+    };
+  }
+
+  const btnBack = document.getElementById("btn-back");
+  if (btnBack) {
+    btnBack.onclick = () => {
+      tocarSomClique();
+      clearInterval(quizAtual.timerInterval);
+      mudarEcra("selection-screen");
+    };
+  }
+
+  const btnRestart = document.getElementById("btn-restart");
+  if (btnRestart) {
+    btnRestart.onclick = () => {
+      tocarSomClique();
+      mudarEcra("selection-screen");
+    };
+  }
+}
+
+function atualizarTimer() {
+  const decorrido = Math.floor((Date.now() - quizAtual.tempoInicio) / 1000);
+  const min = String(Math.floor(decorrido / 60)).padStart(2, "0");
+  const seg = String(decorrido % 60).padStart(2, "0");
+  const timerDisplay = document.getElementById("timer-display");
+  if (timerDisplay) timerDisplay.textContent = `${min}:${seg}`;
+}
+
+function finalizarQuiz() {
+  clearInterval(quizAtual.timerInterval);
+
+  estadoGlobal.pontuacaoTotal += quizAtual.pontuacaoSessao;
+  estadoGlobal.respostasCertasTotais += quizAtual.acertosSessao;
+  estadoGlobal.respostasErradasTotais += quizAtual.errosSessao;
+  estadoGlobal.disciplinasConcluidas++;
+  salvarEstadoAtual();
+
+  document.getElementById("score-display").textContent =
+    estadoGlobal.pontuacaoTotal;
+  document.getElementById("completed-display").textContent =
+    estadoGlobal.disciplinasConcluidas;
+
+  const totalRespostas =
+    estadoGlobal.respostasCertasTotais + estadoGlobal.respostasErradasTotais;
+  const precisao =
+    totalRespostas > 0
+      ? Math.round((estadoGlobal.respostasCertasTotais / totalRespostas) * 100)
+      : 0;
+  document.getElementById("accuracy-display").textContent = `${precisao}%`;
+
+  document.getElementById("result-subject-title").textContent =
+    quizAtual.disciplina.nome;
+  document.getElementById("res-score").textContent = quizAtual.pontuacaoSessao;
+  document.getElementById("res-correct").textContent =
+    `${quizAtual.acertosSessao} / ${quizAtual.disciplina.questoes.length}`;
+  document.getElementById("res-wrong").textContent = quizAtual.errosSessao;
+  document.getElementById("res-time").textContent =
+    document.getElementById("timer-display").textContent;
+
+  // Grava a pontuação desta disciplina no ranking geral (local + Firebase),
+  // para que a página de Pontuações reflita o resultado imediatamente em
+  // qualquer dispositivo.
+  const agenteSessao = JSON.parse(
+    localStorage.getItem("agente_ativo") || "null",
+  );
+  if (agenteSessao && agenteSessao.id) {
+    atualizarProgresso(
+      agenteSessao.id,
+      agenteSessao.nome,
+      quizAtual.pontuacaoSessao,
+      quizAtual.disciplina.nome,
+    );
+  }
+
+  mudarEcra("result-screen");
+}
+
+
+
+// Variável global para guardar a sessão de confirmação do SMS do Firebase
+let resultadoConfirmacaoSMS = null;
+
+// --------------------------------------------------------------------------
+// 2. VALIDAÇÃO E SESSÃO DO UTILIZADOR
+// --------------------------------------------------------------------------
+function validarInformacoesUtilizador() {
+  const agenteSessao = JSON.parse(
+    localStorage.getItem("agente_ativo") || "null"
+  );
+
+  if (agenteSessao && agenteSessao.nome) {
+    return true;
+  }
+
+  const inputNome =
+    document.getElementById("nome-usuario") ||
+    document.getElementById("user-name");
+
+  if (inputNome && inputNome.value.trim() !== "") {
+    return true;
+  }
+
+  alert("Por favor, preencha a sua identificação antes de iniciar o treino!");
+  window.location.href = "index.html";
+  return false;
+}
+
+function exibirNomeAgente() {
+  const displayElemento = document.getElementById("user-display-name");
+  if (!displayElemento) return;
+
+  const agente = JSON.parse(localStorage.getItem("agente_ativo") || "null");
+  displayElemento.textContent =
+    agente && agente.nome ? agente.nome : "Agente Convidado";
+}
+
+// --------------------------------------------------------------------------
+// SUGESTÕES (sugestoes.html)
+// --------------------------------------------------------------------------
+function processarEnvioSugestao(event) {
+  event.preventDefault();
+  const formSugestao = event.target;
+
+  const nomeInput = document.getElementById("sug-nome");
+  const textoInput = document.getElementById("sug-texto");
+
+  const nome = nomeInput ? nomeInput.value.trim() : "";
+  const texto = textoInput ? textoInput.value.trim() : "";
+
+  if (!nome || !texto) {
+    alert("Por favor, preencha todos os campos da sugestão.");
+    return;
+  }
+
+  const novaSugestao = {
+    id: Date.now(),
+    autor: nome,
+    texto: texto,
+    data: new Date().toLocaleString("pt-PT"),
+  };
+
+  // 1. Cache local
+  let sugestoesSalvas = JSON.parse(
+    localStorage.getItem("sugestoes_registadas") || "[]",
+  );
+  sugestoesSalvas.push(novaSugestao);
+  localStorage.setItem("sugestoes_registadas", JSON.stringify(sugestoesSalvas));
+
+  // 2. Firebase — para aparecer no Painel Admin vindo de qualquer dispositivo
+  if (typeof window.firebaseEnviarSugestao === "function") {
+    window.firebaseEnviarSugestao(nome, texto);
+  }
+
+  alert("Sugestão enviada com sucesso! Obrigado pela colaboração.");
+  formSugestao.reset();
+}
+
+// --------------------------------------------------------------------------
+// PAINEL ADMINISTRATIVO (admin.html)
+// --------------------------------------------------------------------------
+function carregarDadosAdm() {
+  carregarHistoricoAgentes();
+  carregarTabelaSugestoes();
+  carregarRankingAdmin();
+  carregarChatAdmin();
+}
+
+// 1. Histórico de agentes (nome + e-mail de TODOS os acessos)
+function carregarHistoricoAgentes(termo = "") {
+  const tabelaBody = document.getElementById("tabela-agentes-body");
+  if (!tabelaBody) return;
+
+  if (typeof window.firebaseEscutarAgentes === "function") {
+    window.firebaseEscutarAgentes((agentesFirebase) => {
+      renderizarTabelaAgentes(filtrarAgentes(agentesFirebase, termo));
+    });
+  } else {
+    const agentesLocais = JSON.parse(
+      localStorage.getItem("agentes_registados") || "[]",
+    );
+    renderizarTabelaAgentes(filtrarAgentes(agentesLocais, termo));
+    console.warn(
+      "Firebase indisponível — o histórico de agentes mostra apenas os acessos feitos neste aparelho.",
+    );
+  }
+}
+
+function filtrarAgentes(agentes, termo) {
+  if (!termo) return agentes;
+  const t = termo.toLowerCase();
+  return agentes.filter(
+    (a) =>
+      (a.nome || "").toLowerCase().includes(t) ||
+      (a.email || "").toLowerCase().includes(t),
+  );
+}
+
+function renderizarTabelaAgentes(agentes) {
+  const tabelaBody = document.getElementById("tabela-agentes-body");
+  if (!tabelaBody) return;
+
+  if (!agentes || agentes.length === 0) {
+    tabelaBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhum agente registado.</td></tr>`;
+    return;
+  }
+
+  tabelaBody.innerHTML = agentes
+    .map(
+      (agente, index) => `
+    <tr>
+      <td><strong>#${index + 1}</strong></td>
+      <td>${escaparHTML(agente.nome)}</td>
+      <td>${escaparHTML(agente.email)}</td>
+      <td>${agente.dataAcesso || "Data não registada"}</td>
+    </tr>
+  `,
+    )
+    .join("");
+}
+
+// 2. Sugestões
+function carregarTabelaSugestoes(termo = "") {
+  const tabelaBody = document.getElementById("lista-sugestoes");
+  if (!tabelaBody) return;
+
+  if (typeof window.firebaseEscutarSugestoes === "function") {
+    window.firebaseEscutarSugestoes((sugestoesFirebase) => {
+      renderizarTabelaSugestoes(filtrarSugestoes(sugestoesFirebase, termo));
+    });
+  } else {
+    const sugestoesLocais = JSON.parse(
+      localStorage.getItem("sugestoes_registadas") || "[]",
+    );
+    renderizarTabelaSugestoes(filtrarSugestoes(sugestoesLocais, termo));
+  }
+}
+
+function filtrarSugestoes(sugestoes, termo) {
+  if (!termo) return sugestoes;
+  const t = termo.toLowerCase();
+  return sugestoes.filter(
+    (s) =>
+      (s.autor || "").toLowerCase().includes(t) ||
+      (s.texto || "").toLowerCase().includes(t),
+  );
+}
+
+function renderizarTabelaSugestoes(sugestoes) {
+  const tabelaBody = document.getElementById("lista-sugestoes");
+  if (!tabelaBody) return;
+
+  if (!sugestoes || sugestoes.length === 0) {
+    tabelaBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhuma sugestão recebida até o momento.</td></tr>`;
+    return;
+  }
+
+  tabelaBody.innerHTML = sugestoes
+    .map(
+      (sug, index) => `
+    <tr>
+      <td><strong>#${index + 1}</strong></td>
+      <td>${escaparHTML(sug.autor)}</td>
+      <td>${escaparHTML(sug.texto)}</td>
+      <td>${sug.data || "Data não registada"}</td>
+    </tr>
+  `,
+    )
+    .join("");
+}
+
+
+// --------------------------------------------------------------------------
+// PÁGINA DE PONTUAÇÕES (pontuacoes.html)
+// --------------------------------------------------------------------------
+function calcularNivelGeral(pontos) {
+if (pontos>= 20000) return " Especialista📜🥉🥈🥇"; 
+  if (pontos >= 7000) return "🥇 Avançado";
+  if (pontos >= 3000) return "🥈 Intermédio";
+  if (pontos >= 500) return "🥉 Iniciante";
+  return "—";
+}
+
+function carregarDados(termo = "") {
+  let agentes = JSON.parse(localStorage.getItem("ranking_agentes") || "[]");
+  const tbody = document.getElementById("tabela-pontuacoes");
+  if (!tbody) return;
+
+  if (termo) {
+    const t = termo.toLowerCase();
+    agentes = agentes.filter((a) => (a.nome || "").toLowerCase().includes(t));
+  }
+
+  agentes.sort((a, b) => b.pontos - a.pontos);
+
+  if (agentes.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align:center; color:#888; padding:15px;">
+          ${termo ? "Nenhum agente corresponde à pesquisa." : "Ainda não há pontuações registadas. Conclui uma disciplina em Treino para apareceres aqui."}
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = agentes
+    .map(
+      (agente, index) => `
+      <tr>
+        <td>${index + 1}º</td>
+        <td>${escaparHTML(agente.nome)}</td>
+        <td>${escaparHTML((agente.cadeiras || []).join(", "))}</td>
+        <td>${agente.pontos}</td>
+        <td>${calcularNivelGeral(agente.pontos)}</td>
+      </tr>
+    `,
+    )
+    .join("");
+}
+
+function filtroPontuacoesAtual() {
+  const input = document.getElementById("filtro-pontuacoes");
+  return input ? input.value : "";
+}
+
+function inicializarPaginaPontuacoes() {
+  if (!document.getElementById("tabela-pontuacoes")) return;
+
+  carregarDados(filtroPontuacoesAtual());
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === "ranking_agentes") carregarDados(filtroPontuacoesAtual());
+  });
+
+  const inputFiltroPontuacoes = document.getElementById("filtro-pontuacoes");
+  if (inputFiltroPontuacoes) {
+    inputFiltroPontuacoes.addEventListener("input", (e) =>
+      carregarDados(e.target.value),
+    );
+  }
+
+  // Ligação ao Firebase: ranking em tempo real, entre qualquer dispositivo.
+  if (typeof window.firebaseEscutarRanking === "function") {
+    window.firebaseEscutarRanking((listaDoFirebase) => {
+      localStorage.setItem("ranking_agentes", JSON.stringify(listaDoFirebase));
+      carregarDados(filtroPontuacoesAtual());
+    });
+  } else {
+    console.warn(
+      "Firebase não está disponível nesta página — a tabela de pontuações está a usar apenas o localStorage (não sincroniza entre dispositivos diferentes).",
+    );
+  }
+}
+
+function atualizarProgresso(id, nome, pontosGanhos, cadeiraConcluida) {
+  let agentes = JSON.parse(localStorage.getItem("ranking_agentes") || "[]");
+  let index = agentes.findIndex((u) => u.id === id);
+
+  if (index !== -1) {
+    agentes[index].pontos += pontosGanhos;
+    agentes[index].nome = nome;
+    if (!agentes[index].cadeiras.includes(cadeiraConcluida)) {
+      agentes[index].cadeiras.push(cadeiraConcluida);
+    }
+  } else {
+    agentes.push({
+      id: id,
+      nome: nome,
+      pontos: pontosGanhos,
+      cadeiras: [cadeiraConcluida],
+    });
+  }
+
+  localStorage.setItem("ranking_agentes", JSON.stringify(agentes));
+  carregarDados();
+
+  if (typeof window.firebaseAtualizarProgresso === "function") {
+    window.firebaseAtualizarProgresso(id, nome, pontosGanhos, cadeiraConcluida);
+  } else {
+    console.warn(
+      "Firebase não está disponível nesta página — a pontuação só foi gravada no localStorage (não sincroniza entre dispositivos diferentes).",
+    );
+  }
+}
+
+// --------------------------------------------------------------------------
+// ESTADO/PONTUAÇÃO DO AGENTE — persistência local
+// --------------------------------------------------------------------------
+function carregarEstadoSalvo() {
+  const dadosSalvos = localStorage.getItem("estado_agente_atual");
+  if (dadosSalvos) {
+    estadoGlobal = JSON.parse(dadosSalvos);
+    atualizarInterfaceSessao();
+  }
+}
+
+function salvarEstadoAtual() {
+  localStorage.setItem("estado_agente_atual", JSON.stringify(estadoGlobal));
+  sincronizarComRankingLocal();
+}
+
+function sincronizarComRankingLocal() {
+  const agenteAtivo = JSON.parse(
+    localStorage.getItem("agente_ativo") || "null",
+  ) || {
+    id: "agente_local",
+    nome: "Agente",
+  };
+  let ranking = JSON.parse(localStorage.getItem("ranking_agentes") || "[]");
+
+  const indice = ranking.findIndex((item) => item.id === agenteAtivo.id);
+  const dadosAgente = {
+    id: agenteAtivo.id,
+    nome: agenteAtivo.nome || "Agente",
+    pontos: estadoGlobal.pontuacaoTotal,
+    cadeiras: (ranking[indice] && ranking[indice].cadeiras) || [],
+    dataAtualizacao: new Date().toISOString(),
+  };
+
+  if (indice !== -1) {
+    ranking[indice] = { ...ranking[indice], ...dadosAgente };
+  } else {
+    ranking.push(dadosAgente);
+  }
+
+  ranking.sort((a, b) => b.pontos - a.pontos);
+  localStorage.setItem("ranking_agentes", JSON.stringify(ranking));
+}
+
+function atualizarInterfaceSessao() {
+  const elemScore = document.getElementById("score-display");
+  const elemCompleted = document.getElementById("completed-display");
+  const elemAccuracy = document.getElementById("accuracy-display");
+
+  if (elemScore) elemScore.textContent = estadoGlobal.pontuacaoTotal;
+  if (elemCompleted)
+    elemCompleted.textContent = estadoGlobal.disciplinasConcluidas;
+
+  if (elemAccuracy) {
+    const total =
+      estadoGlobal.respostasCertasTotais + estadoGlobal.respostasErradasTotais;
+    const precisao =
+      total > 0
+        ? Math.round((estadoGlobal.respostasCertasTotais / total) * 100)
+        : 0;
+    elemAccuracy.textContent = `${precisao}%`;
+  }
+}
+
+
+// --------------------------------------------------------------------------
+// CONVERSA / CHAT (conversa.html)
+// Todos os agentes entram automaticamente na mesma área de conversa a
+// partir da página de Pontuações. O Firebase distribui cada mensagem, com
+// o nome de quem a enviou, a todos os utilizadores em tempo real. As
+// mensagens expiram ao fim de 3 dias (ver firebase-config.js).
+// --------------------------------------------------------------------------
+let chatNomeAtual = "";
+let chatUltimaContagem = 0;
+
+function inicializarChat() {
+  const listaChat = document.getElementById("lista-mensagens-chat");
+  const formChat = document.getElementById("form-chat");
+  if (!listaChat || !formChat) return;
+
+  const agente = JSON.parse(localStorage.getItem("agente_ativo") || "null");
+  chatNomeAtual = agente && agente.nome ? agente.nome : "";
+
+  if (!chatNomeAtual) {
+    chatNomeAtual =
+      (prompt("Introduza o seu nome para entrar na conversa:") || "").trim() ||
+      "Agente Convidado";
+  }
+
+  const rotuloNome = document.getElementById("chat-meu-nome");
+  if (rotuloNome) rotuloNome.textContent = chatNomeAtual;
+
+  formChat.addEventListener("submit", enviarMensagemChat);
+
+  if (typeof window.firebaseEscutarChat === "function") {
+    window.firebaseEscutarChat(renderizarMensagensChat);
+  } else {
+    listaChat.innerHTML = `<p class="chat-vazio">Sem ligação ao Firebase — a conversa não está disponível offline.</p>`;
+  }
+}
+
+function enviarMensagemChat(event) {
+  event.preventDefault();
+  const inputTexto = document.getElementById("chat-texto");
+  if (!inputTexto) return;
+
+  const texto = inputTexto.value.trim();
+  if (!texto) return;
+
+  if (typeof window.firebaseEnviarMensagemChat === "function") {
+    window.firebaseEnviarMensagemChat(chatNomeAtual, texto);
+  } else {
+    alert(
+      "A conversa precisa de ligação à internet (Firebase) para funcionar.",
+    );
+    return;
+  }
+
+  inputTexto.value = "";
+  inputTexto.focus();
+}
+
+function renderizarMensagensChat(mensagens) {
+  const listaChat = document.getElementById("lista-mensagens-chat");
+  if (!listaChat) return;
+
+  if (!mensagens || mensagens.length === 0) {
+    listaChat.innerHTML = `<p class="chat-vazio">Ainda não há mensagens. Sê o primeiro a escrever!</p>`;
+    return;
+  }
+
+  const eraQuaseNoFim =
+    listaChat.scrollTop + listaChat.clientHeight >= listaChat.scrollHeight - 60;
+
+  listaChat.innerHTML = mensagens
+    .map((m) => {
+      const minha = m.nome === chatNomeAtual;
+      return `
+        <div class="chat-bubble ${minha ? "chat-bubble-minha" : ""}">
+          <span class="chat-autor">${escaparHTML(m.nome)}</span>
+          <p class="chat-texto">${escaparHTML(m.texto)}</p>
+        </div>
+      `;
+    })
+    .join("");
+
+  // Mantém a conversa "colada" ao fundo quando chegam mensagens novas,
+  // sem forçar o scroll se o utilizador estiver a ler mensagens antigas.
+  if (eraQuaseNoFim || mensagens.length !== chatUltimaContagem) {
+    listaChat.scrollTop = listaChat.scrollHeight;
+  }
+  chatUltimaContagem = mensagens.length;
+}
+
+
+
+// ==========================================================================
+// M-CRIMINOLOGIA — firebase-config.js
+// Configuração do Firebase e funções de tempo real para o Chat e Ranking.
+// ==========================================================================
+
+// 1. Substitui pelas tuas credenciais do Console do Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyA8wKOVv2OpBWAJeGxt4vwGaGAgeWndFVM",
+  authDomain: "mmcriminologia.firebaseapp.com",
+  projectId: "mmcriminologia",
+  storageBucket: "mmcriminologia.firebasestorage.app",
+  messagingSenderId: "738693788238",
+  appId: "1:738693788238:web:d37ce10ee31f12402b091f",
+};
+
+// Inicialização dos serviços (compatível com os scripts CDN do Firebase v8/v9 compat)
+if (typeof firebase !== "undefined") {
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+} else {
+  console.error("SDK do Firebase não foi carregado na página HTML.");
+}
+
+const db = typeof firebase !== "undefined" ? firebase.firestore() : null;
+
+// --------------------------------------------------------------------------
+// FUNÇÕES DO CHAT EM TEMPO REAL
+// --------------------------------------------------------------------------
+
+/**
+ * Envia uma nova mensagem para o Firebase com a cor personalizada do utilizador.
+ */
+window.firebaseEnviarMensagemChat = function (nome, texto, cor) {
+  if (!db) {
+    console.warn("Firestore não está disponível.");
+    return;
+  }
+
+  db.collection("chat_mensagens")
+    .add({
+      nome: nome || "Agente Convidado",
+      texto: texto,
+      cor: cor || "#1e3a8a", // Cor individual do emissor
+      dataEnvio: firebase.firestore.FieldValue.serverTimestamp(),
+    })
+    .then(() => {
+      console.log("Mensagem enviada com sucesso.");
+    })
+    .catch((error) => {
+      console.error("Erro ao enviar mensagem para o Firebase:", error);
+    });
+};
+
+/**
+ * Escuta as mensagens em tempo real e notifica todos os utilizadores conectados.
+ */
+window.firebaseEscutarChat = function (callback) {
+  if (!db) return;
+
+  db.collection("chat_mensagens")
+    .orderBy("dataEnvio", "asc")
+    .onSnapshot(
+      (snapshot) => {
+        const mensagens = [];
+        snapshot.forEach((doc) => {
+          const dados = doc.data();
+          mensagens.push({
+            id: doc.id,
+            nome: dados.nome,
+            texto: dados.texto,
+            cor: dados.cor || "#1e3a8a",
+          });
+        });
+
+        // Executa a função de renderização no app.js
+        if (typeof callback === "function") {
+          callback(mensagens);
+        }
+      },
+      (error) => {
+        console.error("Erro ao escutar mensagens do chat:", error);
+      }
+    );
+};
+
+// --------------------------------------------------------------------------
+// LIGAÇÕES ADICIONAIS (REGISTO, RANKING E SUGESTÕES)
+// --------------------------------------------------------------------------
+
+window.firebaseRegistrarAgente = function (nome, email) {
+  if (!db) return;
+  db.collection("agentes_registados").doc(email.toLowerCase()).set({
+    nome: nome,
+    email: email.toLowerCase(),
+    ultimoAcesso: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+};
+
+// O ranking global (coleção "ranking_agentes") é fornecido por firebase-config.js,
+// carregado como módulo em treino.html e pontuacoes.html.
+
+function obterContextoAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+  return audioCtx;
 }
 // --------------------------------------------------------------------------
 // INICIALIZAÇÃO
@@ -174,13 +1092,23 @@ function verificarResposta(indiceSelecionado) {
   botoes.forEach((b) => (b.disabled = true));
 
   const statusBox = document.getElementById("feedback-status");
-  const feedbackBox = document.getElementById("feedback-box");
-  const rationaleText = document.getElementById("rationale-text");
-
+ 
   if (indiceSelecionado === q.respostaCorreta) {
     tocarSomAcerto();
     botoes[indiceSelecionado].classList.add("correct");
-    statusBox.textContent = "✓ RESPOSTA CORRETA";
+
+    // Lista de mensagens para alternar
+    const mensagensSucesso = [
+      "✓ RESPOSTA CORRETA",
+      "✓ CERTO COMO SEMPRE, CRIMINÓLOGO",
+      "✓ EXCELENTE ANÁLISE!",
+      "✓ PRECISÃO ABSOLUTA, CRIMINÓLOGO"
+    ];
+
+    // Seleciona uma mensagem aleatória
+    const mensagemAleatoria = mensagensSucesso[Math.floor(Math.random() * mensagensSucesso.length)];
+
+    statusBox.textContent = mensagemAleatoria;
     statusBox.className = "feedback-status success";
 
     let pontosGanhos = 100 - (quizAtual.dicaUsada ? 50 : 0);
@@ -195,12 +1123,6 @@ function verificarResposta(indiceSelecionado) {
 
     quizAtual.errosSessao++;
   }
-
-  rationaleText.textContent = q.justificativa;
-  feedbackBox.classList.remove("hidden");
-
-  const btnNext = document.getElementById("btn-next");
-  if (btnNext) btnNext.disabled = false;
 }
 
 // --------------------------------------------------------------------------
@@ -431,60 +1353,11 @@ class P2PTransfer {
   }
 }
 
-// --------------------------------------------------------------------------
-// VALIDAÇÃO E FLUXO DE UTILIZADOR
-// --------------------------------------------------------------------------
-function validarInformacoesUtilizador() {
-  // 1. Tenta recuperar agente guardado na sessão (LocalStorage)
-  const agenteSessao = JSON.parse(localStorage.getItem("agente_ativo"));
 
-  if (agenteSessao && agenteSessao.nome) {
-    estadoGlobal.utilizador.nome = agenteSessao.nome;
-    estadoGlobal.utilizador.email = agenteSessao.email || "";
-    return true;
-  }
-
-  // 2. Se não houver sessão, procura pelos inputs na página atual (Login)
-  const inputNome =
-    document.getElementById("nome-usuario") ||
-    document.getElementById("user-name");
-  const inputEmail =
-    document.getElementById("email-usuario") ||
-    document.getElementById("user-email");
-
-  if (inputNome && inputNome.value.trim() !== "") {
-    estadoGlobal.utilizador.nome = inputNome.value.trim();
-    if (inputEmail) estadoGlobal.utilizador.email = inputEmail.value.trim();
-    return true;
-  }
-
-  // 3. Se estiver na página de Treino e não houver dados preenchidos/salvos:
-  alert("Por favor, preencha a sua identificação antes de iniciar o treino!");
-  window.location.href = "index.html"; // Redireciona para a página de login
-  return false;
-}
-
-const SENHA_MESTRE = "212100";
 
 // --------------------------------------------------------------------------
 // AUTENTICAÇÃO E NAVEGAÇÃO ADMIN
 // --------------------------------------------------------------------------
-function validarAcessoAdmin() {
-  const inputSenha = document.getElementById("senha-admin").value;
-  const elementoErro = document.getElementById("erro-senha");
-
-  if (inputSenha === SENHA_MESTRE) {
-    if (elementoErro) elementoErro.style.display = "none";
-
-    document.getElementById("modal-auth").classList.add("hidden");
-    document.getElementById("conteudo-painel").classList.remove("hidden");
-
-    carregarDadosAdm();
-  } else {
-    if (elementoErro) elementoErro.style.display = "block";
-  }
-}
-
 // --------------------------------------------------------------------------
 // GERENCIAMENTO DO INDEXEDDB
 // --------------------------------------------------------------------------
@@ -602,49 +1475,110 @@ function processarLogin(event) {
   localStorage.setItem("agentes_registados", JSON.stringify(agentesRegistados));
   localStorage.setItem("agente_ativo", JSON.stringify(novoAgente));
 
-  window.location.href = "treino.html";
+  const seguir = () => {
+    window.location.href = "treino.html";
+  };
+  if (typeof window.mmRegistarEntrada === "function") {
+    // Espera (até 2,5 s) pela gravação no Firebase, senão a mudança de página pode cortá-la
+    Promise.race([
+      window.mmRegistarEntrada(novoAgente).catch((e) => console.error("Registo de entrada falhou:", e)),
+      new Promise((r) => setTimeout(r, 2500)),
+    ]).then(seguir);
+  } else {
+    seguir();
+  }
 }
 
-function carregarHistoricoAgentes(termo = "") {
-  const tabelaBody = document.getElementById("tabela-agentes-body");
-  if (!tabelaBody) return;
+let mmPresenca = [];
+let mmAcessos = [];
+let mmFiltroAgentes = "";
+let mmAgentesLigado = false;
+const MM_LIMITE_ONLINE_MS = 150 * 1000; // sem sinal há mais de 2,5 min = offline
 
-  let agentes = JSON.parse(localStorage.getItem("agentes_registados")) || [];
+function mmFormatarData(ms) {
+  return ms ? new Date(ms).toLocaleString("pt-PT") : "—";
+}
 
-  if (termo) {
-    const t = termo.toLowerCase();
-    agentes = agentes.filter(
-      (a) =>
-        (a.nome || "").toLowerCase().includes(t) ||
-        (a.email || "").toLowerCase().includes(t),
-    );
-  }
+function renderizarPresencaAdmin() {
+  const corpo = document.getElementById("tabela-agentes-body");
+  if (!corpo) return;
 
-  if (agentes.length === 0) {
-    tabelaBody.innerHTML = `
-      <tr>
-        <td colspan="4" style="text-align: center; color: #888; padding: 15px;">
-          ${termo ? "Nenhum agente corresponde à pesquisa." : "Nenhum agente registrado no histórico até o momento."}
-        </td>
-      </tr>
-    `;
+  const t = mmFiltroAgentes.toLowerCase();
+  const lista = mmPresenca.filter(
+    (a) => !t || (a.nome || "").toLowerCase().includes(t) || (a.email || "").toLowerCase().includes(t),
+  );
+
+  if (lista.length === 0) {
+    corpo.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#888;padding:15px;">${
+      t ? "Nenhum agente corresponde à pesquisa." : "Nenhum agente registado até o momento."
+    }</td></tr>`;
     return;
   }
 
-  tabelaBody.innerHTML = agentes
-    .map((agente, index) => {
-      const idExibicao = agente.id ? String(agente.id).slice(-4) : index + 1;
-
+  const agora = Date.now();
+  corpo.innerHTML = lista
+    .map((a, index) => {
+      const online = a.online && a.ultimoSinalMs && agora - a.ultimoSinalMs < MM_LIMITE_ONLINE_MS;
+      const saiuExplicito = !a.online && a.saiuEmMs;
+      const estado = online ? "🟢 Online" : saiuExplicito ? "🔴 Saiu" : "⚪ Offline";
+      const quando = saiuExplicito
+        ? "Saiu em " + mmFormatarData(a.saiuEmMs)
+        : "Visto em " + mmFormatarData(a.ultimoSinalMs);
       return `
-      <tr>
-        <td><strong>#${idExibicao}</strong></td>
-        <td>${escaparHTML(agente.nome)}</td>
-        <td>${escaparHTML(agente.email)}</td>
-        <td>${agente.dataAcesso || "Data não registrada"}</td>
-      </tr>
-    `;
+    <tr>
+      <td><strong>#${index + 1}</strong></td>
+      <td>${escaparHTML(a.nome)}</td>
+      <td>${escaparHTML(a.email)}</td>
+      <td>${estado}</td>
+      <td>${escaparHTML(quando)}</td>
+    </tr>`;
     })
     .join("");
+}
+
+function renderizarAcessosAdmin() {
+  const corpo = document.getElementById("tabela-acessos-body");
+  if (!corpo) return;
+
+  if (mmAcessos.length === 0) {
+    corpo.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#888;padding:15px;">Ainda não há entradas nem saídas registadas.</td></tr>`;
+    return;
+  }
+
+  corpo.innerHTML = mmAcessos
+    .map(
+      (e) => `
+    <tr>
+      <td>${escaparHTML(mmFormatarData(e.dataMs))}</td>
+      <td>${escaparHTML(e.nome)} <small>(${escaparHTML(e.email)})</small></td>
+      <td>${e.tipo === "saida" ? "🔴 Saiu" : "🟢 Entrou"}</td>
+    </tr>`,
+    )
+    .join("");
+}
+
+function carregarHistoricoAgentes(termo = "") {
+  const corpo = document.getElementById("tabela-agentes-body");
+  if (!corpo) return;
+  if (!window.mmAdminAutenticado) return; // só depois do login do administrador
+
+  mmFiltroAgentes = termo;
+  if (typeof window.mmEscutarPresenca === "function") {
+    if (!mmAgentesLigado) {
+      mmAgentesLigado = true;
+      window.mmEscutarPresenca((lista) => {
+        mmPresenca = lista;
+        renderizarPresencaAdmin();
+      }, mmAvisoErroAdmin);
+      window.mmEscutarAcessos((lista) => {
+        mmAcessos = lista;
+        renderizarAcessosAdmin();
+      }, mmAvisoErroAdmin);
+      // Reavalia "online/offline" com o passar do tempo, mesmo sem novos dados
+      setInterval(renderizarPresencaAdmin, 30000);
+    }
+    renderizarPresencaAdmin();
+  }
 }
 
 function escaparHTML(str) {
@@ -668,9 +1602,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// 2. Função para salvar a sugestão no localStorage e IndexedDB
+// 2. Envia a sugestão para o Firebase (o administrador vê-a de qualquer dispositivo)
 function processarEnvioSugestao(event) {
   event.preventDefault();
+  const formSugestao = event.target;
 
   const nomeInput = document.getElementById("sug-nome");
   const textoInput = document.getElementById("sug-texto");
@@ -683,31 +1618,33 @@ function processarEnvioSugestao(event) {
     return;
   }
 
-  const novaSugestao = {
-    id: Date.now(),
-    autor: nome,
-    texto: texto,
-    data: new Date().toLocaleString("pt-PT"),
-  };
+  if (typeof window.mmEnviarSugestao !== "function") {
+    alert("Sem ligação ao servidor. A sugestão NÃO foi enviada — tenta de novo com internet.");
+    return;
+  }
 
-  // Salva no localStorage para carregamento rápido
-  let sugestoesSalvas =
-    JSON.parse(localStorage.getItem("sugestoes_registadas")) || [];
-  sugestoesSalvas.push(novaSugestao);
-  localStorage.setItem("sugestoes_registadas", JSON.stringify(sugestoesSalvas));
+  const botao = formSugestao.querySelector("button[type='submit']");
+  if (botao) {
+    botao.disabled = true;
+    botao.textContent = "A enviar...";
+  }
 
-  // Tenta salvar também no IndexedDB (se a store existir)
-  const reqDB = indexedDB.open("CriminologiaDB", 2);
-  reqDB.onsuccess = function (evt) {
-    const db = evt.target.result;
-    if (db.objectStoreNames.contains("sugestoes")) {
-      const tx = db.transaction(["sugestoes"], "readwrite");
-      tx.objectStore("sugestoes").add(novaSugestao);
-    }
-  };
-
-  alert("Sugestão enviada com sucesso! Obrigado pela colaboração.");
-  formSugestao.reset();
+  window
+    .mmEnviarSugestao(nome, texto)
+    .then(() => {
+      alert("Sugestão enviada com sucesso! Obrigado pela colaboração.");
+      formSugestao.reset();
+    })
+    .catch((erro) => {
+      console.error("Erro ao enviar sugestão:", erro);
+      alert("Não foi possível enviar agora. Verifica a internet e tenta de novo.");
+    })
+    .finally(() => {
+      if (botao) {
+        botao.disabled = false;
+        botao.textContent = "Enviar Sugestão";
+      }
+    });
 }
 
 // 3. Função para carregar TUDO no Painel do Administrador
@@ -720,48 +1657,67 @@ function carregarDadosAdm() {
   configurarFiltrosAdmin();
 }
 
-// 4. Renderização da Tabela de Sugestões no HTML do Painel Admin
-function carregarTabelaSugestoes(termo = "") {
+// 4. Tabela de Sugestões do Painel Admin (lida do Firebase em tempo real)
+let mmSugestoes = [];
+let mmFiltroSugestoes = "";
+let mmSugestoesLigado = false;
+
+function mmAvisoErroAdmin(erro) {
+  console.error("Erro ao ler o Firebase:", erro);
+  if (window.mmAvisouErro) return;
+  window.mmAvisouErro = true;
+  alert(
+    erro && erro.code === "permission-denied"
+      ? "Sem permissão para ler os dados. Confirma o e-mail de administrador nas regras do Firestore."
+      : "Não foi possível ler os dados do servidor.",
+  );
+}
+
+function renderizarSugestoesAdmin() {
   const tabelaBody = document.getElementById("lista-sugestoes");
   if (!tabelaBody) return;
 
-  let sugestoes =
-    JSON.parse(localStorage.getItem("sugestoes_registadas")) || [];
+  const t = mmFiltroSugestoes.toLowerCase();
+  const lista = mmSugestoes.filter(
+    (s) => !t || (s.autor || "").toLowerCase().includes(t) || (s.texto || "").toLowerCase().includes(t),
+  );
 
-  if (termo) {
-    const t = termo.toLowerCase();
-    sugestoes = sugestoes.filter(
-      (s) =>
-        (s.autor || "").toLowerCase().includes(t) ||
-        (s.texto || "").toLowerCase().includes(t),
-    );
-  }
-
-  if (sugestoes.length === 0) {
-    tabelaBody.innerHTML = `
-      <tr>
-        <td colspan="4" style="text-align: center; color: #888; padding: 15px;">
-          ${termo ? "Nenhuma sugestão corresponde à pesquisa." : "Nenhuma sugestão recebida até o momento."}
-        </td>
-      </tr>
-    `;
+  if (lista.length === 0) {
+    tabelaBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#888;padding:15px;">${
+      t ? "Nenhuma sugestão corresponde à pesquisa." : "Nenhuma sugestão recebida até o momento."
+    }</td></tr>`;
     return;
   }
 
-  tabelaBody.innerHTML = sugestoes
-    .map((sug, index) => {
-      const idExibicao = sug.id ? String(sug.id).slice(-4) : index + 1;
-
-      return `
-      <tr>
-        <td><strong>#${idExibicao}</strong></td>
-        <td>${escaparHTML(sug.autor)}</td>
-        <td>${escaparHTML(sug.texto)}</td>
-        <td>${sug.data || "Data não registrada"}</td>
-      </tr>
-    `;
-    })
+  tabelaBody.innerHTML = lista
+    .map(
+      (sug, index) => `
+    <tr>
+      <td><strong>#${lista.length - index}</strong></td>
+      <td>${escaparHTML(sug.autor)}</td>
+      <td>${escaparHTML(sug.texto)}${sug.editada ? ' <small>(editada)</small>' : ''}</td>
+      <td>${escaparHTML(sug.data || "—")}</td>
+    </tr>`,
+    )
     .join("");
+}
+
+function carregarTabelaSugestoes(termo = "") {
+  const tabelaBody = document.getElementById("lista-sugestoes");
+  if (!tabelaBody) return;
+  if (!window.mmAdminAutenticado) return; // só depois do login do administrador
+
+  mmFiltroSugestoes = termo;
+  if (typeof window.mmEscutarSugestoes === "function") {
+    if (!mmSugestoesLigado) {
+      mmSugestoesLigado = true;
+      window.mmEscutarSugestoes((lista) => {
+        mmSugestoes = lista;
+        renderizarSugestoesAdmin();
+      }, mmAvisoErroAdmin);
+    }
+    renderizarSugestoesAdmin();
+  }
 }
 
 // 5. Renderização do RANKING dentro do Painel Admin (com filtro por nome)
@@ -830,57 +1786,6 @@ function configurarFiltrosAdmin() {
   }
 }
 
-// --------------------------------------------------------------------------
-// PÁGINA DE PONTUAÇÕES (pontuacoes.html) — leitura, filtro e atualização
-// automática enquanto a página estiver aberta.
-// --------------------------------------------------------------------------
-
-// Calcula um "Nível Geral" simples a partir da pontuação acumulada.
-function calcularNivelGeral(pontos) {
-  if (pontos >= 3000) return "🥇 Avançado";
-  if (pontos >= 1200) return "🥈 Intermédio";
-  if (pontos > 0) return "🥉 Iniciante";
-  return "—";
-}
-
-function carregarDados(termo = "") {
-  let agentes = JSON.parse(localStorage.getItem("ranking_agentes")) || [];
-  const tbody = document.getElementById("tabela-pontuacoes");
-
-  if (!tbody) return; // Se não estiver na página de pontuações, ignora
-
-  if (termo) {
-    const t = termo.toLowerCase();
-    agentes = agentes.filter((a) => (a.nome || "").toLowerCase().includes(t));
-  }
-
-  agentes.sort((a, b) => b.pontos - a.pontos);
-
-  if (agentes.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="5" style="text-align:center; color:#888; padding:15px;">
-          ${termo ? "Nenhum agente corresponde à pesquisa." : "Ainda não há pontuações registadas. Conclui uma disciplina em Treino para apareceres aqui."}
-        </td>
-      </tr>
-    `;
-    return;
-  }
-
-  tbody.innerHTML = agentes
-    .map(
-      (agente, index) => `
-      <tr>
-        <td>${index + 1}º</td>
-        <td>${escaparHTML(agente.nome)}</td>
-        <td>${escaparHTML((agente.cadeiras || []).join(", "))}</td>
-        <td>${agente.pontos}</td>
-        <td>${calcularNivelGeral(agente.pontos)}</td>
-      </tr>
-    `,
-    )
-    .join("");
-}
 
 // Mantém a página de Pontuações "ao vivo".
 // Duas camadas de sincronização:
@@ -1033,40 +1938,6 @@ function atualizarInterfaceSessao() {
   }
 }
 
-// ==========================================================================
-// 2. APAGAR PONTUAÇÃO (Apenas por ação direta e manual do utilizador)
-// ==========================================================================
-
-function apagarMinhaPontuacao() {
-  const confirmacao = confirm(
-    "Tens a certeza de que desejas apagar todo o teu progresso? Esta ação não pode ser desfeita.",
-  );
-
-  if (confirmacao) {
-    // Limpa a memória local
-    estadoGlobal = {
-      pontuacaoTotal: 0,
-      respostasCertasTotais: 0,
-      respostasErradasTotais: 0,
-      disciplinasConcluidas: 0,
-    };
-
-    // Remove do armazenamento permanente
-    localStorage.removeItem("estado_agente_atual");
-
-    // Remove o registo do ranking local
-    const agenteAtivo = JSON.parse(localStorage.getItem("agente_ativo"));
-    if (agenteAtivo && agenteAtivo.id) {
-      let ranking = JSON.parse(localStorage.getItem("ranking_agentes")) || [];
-      ranking = ranking.filter((item) => item.id !== agenteAtivo.id);
-      localStorage.setItem("ranking_agentes", JSON.stringify(ranking));
-    }
-
-    atualizarInterfaceSessao();
-    alert("O teu progresso foi eliminado com sucesso.");
-    location.reload();
-  }
-}
 
 
 // ==========================================================================
@@ -1184,12 +2055,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Se já existirem dados salvos, pula a tela de login
   if (usuarioSalvo) {
+
+    
     window.location.href = "dashboard.html";
   }
 });
 
 /* ==========================================================================
-   M-CRIMINOLOGIA - ESTRUTURA DE DADOS E LÓGICA DO SISTEMA (CORRIGIDO)
+   M-CRIMINOLOGIA - ESTRUTURA DE DADOS E LÓGICA DO SISTEMA (CORRIGIDO) perguntas,respostas,dicas,justificativas,
    ========================================================================== */
 
 const BANCO_DE_DADOS = [
