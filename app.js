@@ -1092,7 +1092,9 @@ function verificarResposta(indiceSelecionado) {
   botoes.forEach((b) => (b.disabled = true));
 
   const statusBox = document.getElementById("feedback-status");
- 
+  const feedbackBox = document.getElementById("feedback-box");
+  const rationaleText = document.getElementById("rationale-text");
+
   if (indiceSelecionado === q.respostaCorreta) {
     tocarSomAcerto();
     botoes[indiceSelecionado].classList.add("correct");
@@ -1123,6 +1125,12 @@ function verificarResposta(indiceSelecionado) {
 
     quizAtual.errosSessao++;
   }
+
+  rationaleText.textContent = q.justificativa;
+  feedbackBox.classList.remove("hidden");
+
+  const btnNext = document.getElementById("btn-next");
+  if (btnNext) btnNext.disabled = false;
 }
 
 // --------------------------------------------------------------------------
